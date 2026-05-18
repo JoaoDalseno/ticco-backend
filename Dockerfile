@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Dependências do sistema para xhtml2pdf (pycairo/rlpycairo/svglib)
+# Dependências do sistema para WeasyPrint
 RUN apt-get update && apt-get install -y \
     gcc \
     pkg-config \

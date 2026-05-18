@@ -24,7 +24,7 @@ openai>=1.50.0
 httpx>=0.27.0
 
 # PDF
-xhtml2pdf>=0.2.16
+weasyprint>=61.0
 
 # Storage
 supabase==2.9.1

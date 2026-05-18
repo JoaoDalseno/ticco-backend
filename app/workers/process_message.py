@@ -10,9 +10,12 @@ Fluxo:
   6. Extrai dados com Claude
   7. Identifica fazenda/talhão no banco
   8. Salva Visita no banco
-  9. Envia resumo formatado ao agrônomo
- 10. Marca mensagem como processada
+  9. Gera PDFs (relatório + receituário)
+ 10. Upload para Supabase Storage
+ 11. Envia resumo + PDFs ao agrônomo via WhatsApp
+ 12. Marca mensagem como processada
 """
+import asyncio
 import uuid
 from datetime import date
 
@@ -27,6 +30,9 @@ from app.models.mensagem import Mensagem
 from app.models.talhao import Talhao
 from app.models.visita import StatusVisitaEnum, Visita
 from app.services.ai_processor import AIProcessor
+from app.services.icp_brasil import ICPBrasilService
+from app.services.pdf_generator import gerar_receituario, gerar_relatorio
+from app.services.storage import StorageService
 from app.services.transcription import TranscriptionService
 from app.services.whatsapp.zapi import ZAPIWhatsAppService
 from app.utils.logger import setup_logger
@@ -36,6 +42,8 @@ logger = setup_logger(__name__)
 whatsapp = ZAPIWhatsAppService()
 transcription = TranscriptionService()
 ai_processor = AIProcessor()
+storage = StorageService()
+icp = ICPBrasilService()
 
 MSG_RECEBIDO = "Recebi! Tô processando sua visita... 🐦"
 
@@ -201,14 +209,78 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
 
         logger.info(f"Visita {visita.id} salva no banco")
 
-        # 9. Envia resumo formatado ao agrônomo
+        # 9. Gera PDFs em paralelo (relatório obrigatório, receituário só com recomendações)
+        pdf_relatorio_bytes: bytes | None = None
+        pdf_receituario_bytes: bytes | None = None
+        numero_serie: str | None = None
+
+        try:
+            pdf_relatorio_bytes = await asyncio.to_thread(
+                gerar_relatorio, agronomo, fazenda_db, talhao_db, dados, visita.data_visita
+            )
+            logger.info(f"Relatório PDF gerado — {len(pdf_relatorio_bytes)} bytes")
+
+            if dados.recomendacoes:
+                numero_serie = icp.gerar_numero_serie(visita.id)
+                pdf_receituario_bytes = await asyncio.to_thread(
+                    gerar_receituario,
+                    agronomo,
+                    fazenda_db,
+                    talhao_db,
+                    dados,
+                    visita.data_visita,
+                    numero_serie,
+                )
+                logger.info(f"Receituário PDF gerado — {len(pdf_receituario_bytes)} bytes")
+        except Exception as e:
+            logger.error(f"Erro ao gerar PDF da visita {visita.id}: {e}", exc_info=True)
+
+        # 10. Upload dos PDFs para o Storage
+        if pdf_relatorio_bytes:
+            try:
+                url_relatorio = await storage.upload_pdf(
+                    path=f"visitas/{visita.id}/relatorio.pdf",
+                    pdf_bytes=pdf_relatorio_bytes,
+                )
+                visita.pdf_relatorio_url = url_relatorio
+            except Exception as e:
+                logger.error(f"Erro no upload do relatório: {e}", exc_info=True)
+
+        if pdf_receituario_bytes:
+            try:
+                url_receituario = await storage.upload_pdf(
+                    path=f"visitas/{visita.id}/receituario.pdf",
+                    pdf_bytes=pdf_receituario_bytes,
+                )
+                visita.pdf_receituario_url = url_receituario
+            except Exception as e:
+                logger.error(f"Erro no upload do receituário: {e}", exc_info=True)
+
+        await db.commit()
+
+        # 11. Envia resumo formatado ao agrônomo
         resumo = await ai_processor.gerar_resumo_whatsapp(
             dados=dados,
             nome_agronomo=agronomo.nome,
         )
         await whatsapp.send_text(phone, resumo)
 
-        # 10. Marca como processada
+        # 12. Envia PDFs via WhatsApp se foram enviados ao Storage
+        if visita.pdf_relatorio_url:
+            await whatsapp.send_document(
+                phone,
+                document_url=visita.pdf_relatorio_url,
+                filename=f"relatorio_{visita.data_visita}.pdf",
+            )
+
+        if visita.pdf_receituario_url:
+            await whatsapp.send_document(
+                phone,
+                document_url=visita.pdf_receituario_url,
+                filename=f"receituario_{numero_serie}.pdf",
+            )
+
+        # 13. Marca como processada
         mensagem.processada = True
         visita.status = StatusVisitaEnum.completa
         await db.commit()

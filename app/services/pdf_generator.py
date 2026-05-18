@@ -3,14 +3,13 @@ Geração de PDFs via WeasyPrint.
 
 Gera dois documentos por visita:
   - Relatório de visita técnica
-  - Receituário agronômico (quando há produtos fitossanitários)
+  - Receituário agronômico (quando há recomendações com produto fitossanitário)
 """
 import html
-import io
 import logging
 from datetime import date
 
-from xhtml2pdf import pisa
+import weasyprint
 
 from app.models.agronomo import Agronomo
 from app.models.fazenda import Fazenda
@@ -19,45 +18,62 @@ from app.schemas.visita import VisitaDadosEstruturados
 
 logger = logging.getLogger(__name__)
 
-_CSS_BASE = """
-@page { size: A4; margin: 2cm; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: Arial, sans-serif; font-size: 11pt; color: #222; line-height: 1.5; }
-h1 { font-size: 16pt; color: #2d5a1b; margin-bottom: 4px; }
-h2 { font-size: 13pt; color: #2d5a1b; margin: 16px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
-h3 { font-size: 11pt; margin: 10px 0 4px; }
-.header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #2d5a1b; }
-.header-logo { font-size: 22pt; font-weight: bold; color: #2d5a1b; letter-spacing: -1px; }
-.header-info { text-align: right; font-size: 9pt; color: #555; }
-.info-box { background: #f5f5f0; border: 1px solid #ddd; border-radius: 4px; padding: 10px 14px; margin: 10px 0; }
-.info-row { display: flex; gap: 8px; margin: 3px 0; }
-.info-label { font-weight: bold; min-width: 140px; color: #444; }
-table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10pt; }
-th { background: #2d5a1b; color: white; padding: 6px 8px; text-align: left; }
-td { padding: 5px 8px; border-bottom: 1px solid #eee; }
-tr:nth-child(even) td { background: #f9f9f9; }
-.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9pt; font-weight: bold; }
-.badge-alta { background: #fde8e8; color: #c00; }
-.badge-media { background: #fff3cd; color: #856404; }
-.badge-leve { background: #d4edda; color: #155724; }
-.footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #ccc; font-size: 9pt; color: #777; text-align: center; }
-.assinatura { margin-top: 40px; text-align: center; }
-.assinatura-linha { border-top: 1px solid #222; width: 280px; margin: 0 auto 4px; padding-top: 4px; }
-.num-serie { font-family: monospace; font-size: 9pt; color: #888; }
+# Paleta Ticco
+_CAFE = "#6B3410"
+_VERDE = "#3D5A3D"
+_CREME = "#F5EDE0"
+_TERRA = "#3D2817"
+_OURO = "#C9A961"
+
+_CSS_BASE = f"""
+@page {{ size: A4; margin: 2cm; }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: Arial, sans-serif; font-size: 11pt; color: {_TERRA}; line-height: 1.6; background: #fff; }}
+h1 {{ font-size: 18pt; color: {_CAFE}; margin-bottom: 4px; }}
+h2 {{ font-size: 13pt; color: {_VERDE}; margin: 18px 0 6px; border-bottom: 2px solid {_OURO}; padding-bottom: 4px; }}
+h3 {{ font-size: 11pt; margin: 10px 0 4px; }}
+.header {{ display: flex; justify-content: space-between; align-items: flex-start;
+           margin-bottom: 20px; padding-bottom: 14px; border-bottom: 3px solid {_CAFE}; }}
+.header-logo {{ font-size: 26pt; font-weight: bold; color: {_CAFE}; letter-spacing: -1px; }}
+.header-subtitle {{ font-size: 10pt; color: {_VERDE}; margin-top: 2px; }}
+.header-info {{ text-align: right; font-size: 9pt; color: #555; }}
+.info-box {{ background: {_CREME}; border-left: 4px solid {_OURO}; border-radius: 4px;
+             padding: 10px 14px; margin: 10px 0; }}
+.info-row {{ display: flex; gap: 8px; margin: 4px 0; }}
+.info-label {{ font-weight: bold; min-width: 150px; color: {_CAFE}; }}
+table {{ width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 10pt; }}
+th {{ background: {_VERDE}; color: #fff; padding: 7px 10px; text-align: left; }}
+td {{ padding: 6px 10px; border-bottom: 1px solid #e0d5cc; }}
+tr:nth-child(even) td {{ background: #faf7f2; }}
+.badge {{ display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 9pt; font-weight: bold; }}
+.badge-alta {{ background: #fde8e8; color: #9b1c1c; }}
+.badge-media {{ background: #fff3cd; color: #7d5a00; }}
+.badge-leve {{ background: #d4edda; color: #155724; }}
+.footer {{ margin-top: 30px; padding-top: 12px; border-top: 1px solid #ccc;
+           font-size: 9pt; color: #888; text-align: center; }}
+.assinatura {{ margin-top: 40px; text-align: center; }}
+.assinatura-linha {{ border-top: 1px solid {_TERRA}; width: 300px; margin: 0 auto 4px;
+                     padding-top: 6px; font-size: 10pt; }}
+.num-serie {{ font-family: monospace; font-size: 9pt; color: #888; }}
 """
 
 
 def _e(value: str | None) -> str:
-    """HTML-escapa strings de usuário para prevenir injeção de HTML nos PDFs."""
+    """HTML-escapa valores de usuário para evitar injeção de HTML nos PDFs."""
     return html.escape(str(value or ""), quote=True)
 
 
 def _badge(severidade: str) -> str:
-    return f'<span class="badge badge-{_e(severidade)}">{_e(severidade.upper())}</span>'
+    cls = _e(severidade.lower())
+    return f'<span class="badge badge-{cls}">{_e(severidade.upper())}</span>'
 
 
 def _data_fmt(d: date) -> str:
     return d.strftime("%d/%m/%Y")
+
+
+def _html_to_pdf(html_str: str) -> bytes:
+    return weasyprint.HTML(string=html_str).write_pdf()
 
 
 # ── Relatório de Visita ───────────────────────────────────────────────────────
@@ -70,57 +86,79 @@ def _html_relatorio(
     data_visita: date,
 ) -> str:
     pragas_html = ""
-    if dados.pragas:
+    if dados.pragas_identificadas:
         rows = "".join(
-            f"<tr><td>{_e(p.nome)}</td><td>{_badge(p.severidade)}</td>"
-            f"<td>{_e(str(p.area_afetada_pct)) if p.area_afetada_pct else '—'}%</td><td>{_e(p.observacao) if p.observacao else '—'}</td></tr>"
-            for p in dados.pragas
+            f"<tr>"
+            f"<td>{_e(p.nome_popular)}"
+            f"{'<br><small style=\"color:#666\">' + _e(p.nome_cientifico) + '</small>' if p.nome_cientifico else ''}"
+            f"</td>"
+            f"<td>{_badge(p.severidade)}</td>"
+            f"<td>{_e(str(p.area_afetada_ha)) + ' ha' if p.area_afetada_ha else '—'}</td>"
+            f"</tr>"
+            for p in dados.pragas_identificadas
         )
         pragas_html = f"""
         <h2>Pragas Detectadas</h2>
         <table>
-          <tr><th>Praga</th><th>Severidade</th><th>Área</th><th>Observação</th></tr>
+          <tr><th>Praga</th><th>Severidade</th><th>Área Afetada</th></tr>
           {rows}
         </table>"""
 
     doencas_html = ""
-    if dados.doencas:
+    if dados.doencas_identificadas:
         rows = "".join(
-            f"<tr><td>{_e(d.nome)}</td><td>{_badge(d.severidade)}</td>"
-            f"<td>{_e(str(d.area_afetada_pct)) if d.area_afetada_pct else '—'}%</td><td>{_e(d.observacao) if d.observacao else '—'}</td></tr>"
-            for d in dados.doencas
+            f"<tr>"
+            f"<td>{_e(d.nome)}</td>"
+            f"<td>{_badge(d.severidade)}</td>"
+            f"<td>{_e(str(d.area_afetada_ha)) + ' ha' if d.area_afetada_ha else '—'}</td>"
+            f"</tr>"
+            for d in dados.doencas_identificadas
         )
         doencas_html = f"""
         <h2>Doenças Detectadas</h2>
         <table>
-          <tr><th>Doença</th><th>Severidade</th><th>Área</th><th>Observação</th></tr>
+          <tr><th>Doença</th><th>Severidade</th><th>Área Afetada</th></tr>
           {rows}
         </table>"""
 
     recom_html = ""
     if dados.recomendacoes:
-        items = "".join(
-            f"<tr><td>{_e(r.tipo.replace('_', ' ').title())}</td><td>{_e(r.descricao)}</td>"
-            f"<td>{_e(r.produto) if r.produto else '—'}</td><td>{_e(r.dose) if r.dose else '—'}</td>"
-            f"<td>{_e(str(r.area_ha)) if r.area_ha else '—'} ha</td></tr>"
+        rows = "".join(
+            f"<tr>"
+            f"<td>{_e(r.produto_sugerido)}"
+            f"{'<br><small style=\"color:#666\">' + _e(r.ingrediente_ativo) + '</small>' if r.ingrediente_ativo else ''}"
+            f"</td>"
+            f"<td>{_e(r.dose) if r.dose else '—'}</td>"
+            f"<td>{_e(str(r.area_ha)) + ' ha' if r.area_ha else '—'}</td>"
+            f"<td>{_badge(r.prioridade)}</td>"
+            f"<td>{_e(r.justificativa) if r.justificativa else '—'}</td>"
+            f"</tr>"
             for r in dados.recomendacoes
         )
         recom_html = f"""
         <h2>Recomendações Técnicas</h2>
         <table>
-          <tr><th>Tipo</th><th>Descrição</th><th>Produto</th><th>Dose</th><th>Área</th></tr>
-          {items}
+          <tr><th>Produto / I.A.</th><th>Dose</th><th>Área</th><th>Prioridade</th><th>Justificativa</th></tr>
+          {rows}
         </table>"""
 
-    obs = f"<h2>Observações Gerais</h2><p>{_e(dados.observacoes_gerais)}</p>" if dados.observacoes_gerais else ""
-    prox = (
-        f'<div class="info-box"><div class="info-row"><span class="info-label">Próxima visita:</span>'
-        f"<span>{_e(dados.proxima_visita)}</span></div></div>"
-        if dados.proxima_visita else ""
+    obs_html = (
+        f"<h2>Observações Gerais</h2><p style='margin-top:6px'>{_e(dados.observacoes_gerais)}</p>"
+        if dados.observacoes_gerais else ""
+    )
+    prox_html = (
+        f'<div class="info-box" style="margin-top:14px">'
+        f'<div class="info-row"><span class="info-label">Próxima visita sugerida:</span>'
+        f"<span>{_e(dados.proxima_visita_sugerida)}</span></div></div>"
+        if dados.proxima_visita_sugerida else ""
     )
 
     talhao_info = f" — {_e(talhao.nome)} ({talhao.area_ha} ha)" if talhao else ""
-    estadio = f"<div class='info-row'><span class='info-label'>Estádio fenológico:</span><span>{_e(dados.estadio_fenologico)}</span></div>" if dados.estadio_fenologico else ""
+    estadio_html = (
+        f"<div class='info-row'><span class='info-label'>Estádio fenológico:</span>"
+        f"<span>{_e(dados.estadio_fenologico)}</span></div>"
+        if dados.estadio_fenologico else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
@@ -130,7 +168,7 @@ def _html_relatorio(
   <div class="header">
     <div>
       <div class="header-logo">ticco</div>
-      <div style="font-size:10pt;color:#555">Relatório de Visita Técnica</div>
+      <div class="header-subtitle">Relatório de Visita Técnica</div>
     </div>
     <div class="header-info">
       Emitido em {_data_fmt(date.today())}<br>
@@ -142,20 +180,20 @@ def _html_relatorio(
   <div class="info-box">
     <div class="info-row"><span class="info-label">Fazenda:</span><span>{_e(fazenda.nome)}{talhao_info}</span></div>
     <div class="info-row"><span class="info-label">Proprietário:</span><span>{_e(fazenda.dono_nome)}</span></div>
-    <div class="info-row"><span class="info-label">Município:</span><span>{_e(fazenda.cidade)}/{_e(fazenda.estado)}</span></div>
+    <div class="info-row"><span class="info-label">Município/UF:</span><span>{_e(fazenda.cidade)}/{_e(fazenda.estado)}</span></div>
     <div class="info-row"><span class="info-label">Data da visita:</span><span>{_data_fmt(data_visita)}</span></div>
-    {estadio}
+    {estadio_html}
   </div>
 
   {pragas_html}
   {doencas_html}
   {recom_html}
-  {obs}
-  {prox}
+  {obs_html}
+  {prox_html}
 
   <div class="assinatura">
     <div class="assinatura-linha">{_e(agronomo.nome)}<br>CREA: {_e(agronomo.crea)}</div>
-    <p style="font-size:9pt;color:#777">Responsável Técnico</p>
+    <p style="font-size:9pt;color:#777;margin-top:4px">Engenheiro Agrônomo Responsável</p>
   </div>
 
   <div class="footer">
@@ -179,23 +217,29 @@ def _html_receituario(
 
     produtos_rows = "".join(
         f"""<tr>
-          <td>{_e(p.nome_comercial)}<br><small style="color:#555">{_e(p.ingrediente_ativo)}</small></td>
-          <td>{_e(p.cultura)}</td>
-          <td>{_e(p.praga_alvo)}</td>
-          <td>{_e(p.dose)}</td>
-          <td>{_e(p.volume_calda) if p.volume_calda else '—'}</td>
-          <td>{p.intervalo_seguranca_dias or '—'} dias</td>
+          <td>{_e(r.produto_sugerido)}<br>
+              <small style="color:#666">{_e(r.ingrediente_ativo) if r.ingrediente_ativo else '—'}</small></td>
+          <td>{_e(r.dose) if r.dose else '—'}</td>
+          <td>{_e(r.volume_calda) if r.volume_calda else '—'}</td>
+          <td>{_e(str(r.area_ha)) + ' ha' if r.area_ha else '—'}</td>
+          <td>{_e(str(r.periodo_carencia_dias)) + ' dias' if r.periodo_carencia_dias else '—'}</td>
+          <td>{_badge(r.prioridade)}</td>
         </tr>"""
-        for p in dados.produtos_receituario
+        for r in dados.recomendacoes
     )
 
+    # Agrega todos os EPIs mencionados nas recomendações
     epis_todos: list[str] = []
-    for p in dados.produtos_receituario:
-        epis_todos.extend(p.epis)
+    for r in dados.recomendacoes:
+        if r.epi:
+            epis_todos.extend(r.epi)
     epis_unicos = list(dict.fromkeys(epis_todos))
     epis_html = (
-        "<ul>" + "".join(f"<li>{_e(e)}</li>" for e in epis_unicos) + "</ul>"
-        if epis_unicos else "<p>Consulte a bula do produto.</p>"
+        "<ul style='margin-left:18px;margin-top:6px'>"
+        + "".join(f"<li>{_e(e)}</li>" for e in epis_unicos)
+        + "</ul>"
+        if epis_unicos
+        else "<p style='margin-top:6px'>Consulte a bula do produto.</p>"
     )
 
     return f"""<!DOCTYPE html>
@@ -206,7 +250,7 @@ def _html_receituario(
   <div class="header">
     <div>
       <div class="header-logo">ticco</div>
-      <div style="font-size:10pt;color:#555">Receituário Agronômico</div>
+      <div class="header-subtitle">Receituário Agronômico</div>
     </div>
     <div class="header-info">
       <span class="num-serie">Nº {_e(numero_serie)}</span><br>
@@ -235,11 +279,11 @@ def _html_receituario(
   <table>
     <tr>
       <th>Produto / Ingrediente Ativo</th>
-      <th>Cultura</th>
-      <th>Alvo</th>
       <th>Dose</th>
       <th>Vol. Calda</th>
+      <th>Área</th>
       <th>Carência</th>
+      <th>Prioridade</th>
     </tr>
     {produtos_rows}
   </table>
@@ -249,7 +293,7 @@ def _html_receituario(
 
   <div class="assinatura">
     <div class="assinatura-linha">{_e(agronomo.nome)}<br>CREA: {_e(agronomo.crea)}</div>
-    <p style="font-size:9pt;color:#777">Engenheiro Agrônomo Responsável</p>
+    <p style="font-size:9pt;color:#777;margin-top:4px">Engenheiro Agrônomo Responsável</p>
     <p class="num-serie" style="margin-top:8px">Receituário Nº {_e(numero_serie)}</p>
   </div>
 
@@ -261,14 +305,6 @@ def _html_receituario(
 
 
 # ── Funções públicas ──────────────────────────────────────────────────────────
-
-def _html_to_pdf(html: str) -> bytes:
-    buf = io.BytesIO()
-    result = pisa.pisaDocument(io.StringIO(html), buf)
-    if result.err:
-        raise RuntimeError(f"Erro ao gerar PDF: {result.err}")
-    return buf.getvalue()
-
 
 def gerar_relatorio(
     agronomo: Agronomo,
