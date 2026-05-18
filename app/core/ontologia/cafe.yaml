@@ -1,0 +1,108 @@
+variedades_arabica:
+  catuai_vermelho_144:
+    nomes_populares: ["catuaí vermelho", "catuaí 144", "144"]
+    porte: baixo
+    resistencia_ferrugem: baixa
+  catuai_amarelo_62:
+    nomes_populares: ["catuaí amarelo", "62", "IAC 62"]
+    porte: baixo
+  bourbon_amarelo:
+    nomes_populares: ["bourbon amarelo", "bourbon"]
+    porte: alto
+  mundo_novo:
+    nomes_populares: ["mundo novo"]
+    porte: alto
+  obata:
+    nomes_populares: ["obatã", "obatá"]
+    porte: medio
+    resistencia_ferrugem: alta
+  topazio:
+    nomes_populares: ["topázio", "topazio"]
+    porte: alto
+  arara:
+    nomes_populares: ["arara"]
+    porte: medio
+  ipr_100:
+    nomes_populares: ["IPR 100", "ipr 100"]
+    porte: medio
+  acaia:
+    nomes_populares: ["acaiá", "acaia"]
+    porte: alto
+
+estadios_fenologicos:
+  - {id: floracao, label: "Floração"}
+  - {id: chumbinho, label: "Chumbinho"}
+  - {id: expansao_grao, label: "Expansão do grão"}
+  - {id: granacao, label: "Granação"}
+  - {id: cereja, label: "Cereja"}
+  - {id: cereja_passa, label: "Cereja passa"}
+  - {id: boia, label: "Boia"}
+  - {id: pos_colheita, label: "Pós-colheita"}
+
+pragas:
+  broca_do_cafe:
+    nome_cientifico: "Hypothenemus hampei"
+    nomes_populares: ["broca", "broca do café", "broca-do-café"]
+    estadio_critico: granacao
+    nivel_dano_economico: "2-3% de frutos brocados"
+    controle_biologico: ["Beauveria bassiana"]
+    controle_quimico: ["clorpirifós", "ciantraniliprole", "espinosade"]
+  bicho_mineiro:
+    nome_cientifico: "Leucoptera coffeella"
+    nomes_populares: ["bicho mineiro", "mineiro", "bicho-mineiro"]
+    controle_quimico: ["imidacloprido", "tiametoxam", "acetamiprido"]
+  cigarrinha:
+    nomes_populares: ["cigarrinha"]
+    controle_quimico: ["imidacloprido", "tiametoxam"]
+  cochonilha:
+    nomes_populares: ["cochonilha", "cochonilha-da-raiz"]
+    controle_quimico: ["clorpirifós", "imidacloprido"]
+  acaro:
+    nomes_populares: ["ácaro", "acaro", "ácaro-vermelho", "ácaro-branco"]
+    controle_quimico: ["abamectina", "fenpiroximato", "propargito"]
+
+doencas:
+  ferrugem_alaranjada:
+    nome_cientifico: "Hemileia vastatrix"
+    nomes_populares: ["ferrugem", "ferrugem alaranjada", "ferrugem do café"]
+    condicao_favoravel: "alta umidade + temperatura 22-25°C"
+    controle_preventivo: ["cobre", "mancozebe", "oxicloreto de cobre"]
+    controle_curativo: ["tebuconazol", "epoxiconazol", "estrobilurinas"]
+  cercosporiose:
+    nome_cientifico: "Cercospora coffeicola"
+    nomes_populares: ["cercosporiose", "olho pardo", "mancha de cercospora"]
+    controle: ["cobre", "mancozebe", "carbendazim"]
+  phoma:
+    nome_cientifico: "Phoma tarda"
+    nomes_populares: ["phoma", "mancha de phoma", "seca de ponteiros"]
+    condicao_favoravel: "frio + chuva em regiões de altitude"
+    controle: ["cobre", "triazóis"]
+  antracnose:
+    nome_cientifico: "Colletotrichum gloeosporioides"
+    nomes_populares: ["antracnose"]
+
+operacoes_culturais:
+  - {id: arruacao, label: "Arruação"}
+  - {id: esqueletamento, label: "Esqueletamento"}
+  - {id: recepa, label: "Recepa"}
+  - {id: desbrota, label: "Desbrota"}
+  - {id: capa_meia, label: "Capa e meia"}
+  - {id: capina_quimica, label: "Capina química"}
+  - {id: capina_mecanica, label: "Capina mecânica"}
+  - {id: adubacao_foliar, label: "Adubação foliar"}
+  - {id: adubacao_solo, label: "Adubação de solo"}
+  - {id: irrigacao, label: "Irrigação"}
+  - {id: colheita, label: "Colheita"}
+  - {id: secagem, label: "Secagem"}
+  - {id: beneficiamento, label: "Beneficiamento"}
+
+certificacoes:
+  - {id: rainforest_alliance, label: "Rainforest Alliance"}
+  - {id: utz, label: "UTZ Certified"}
+  - {id: "4c", label: "4C"}
+  - {id: bsca, label: "BSCA"}
+  - {id: organico, label: "Orgânico MAPA"}
+  - {id: fair_trade, label: "Fair Trade"}
+  - {id: ig_alta_mogiana, label: "IG Alta Mogiana"}
+  - {id: ig_cerrado_mineiro, label: "IG Cerrado Mineiro"}
+  - {id: ig_sul_de_minas, label: "IG Sul de Minas"}

@@ -3,13 +3,12 @@ Cliente HTTP para a Z-API (WhatsApp).
 
 Referência: https://developer.z-api.io/
 """
-import logging
-
 import httpx
 
 from app.config import settings
+from app.utils.logger import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 def _mask(phone: str) -> str:
@@ -59,3 +58,16 @@ async def send_image(phone: str, image_url: str, caption: str = "") -> dict:
         resp = await client.post(url, json=payload, headers=_headers())
         resp.raise_for_status()
         return resp.json()
+
+
+class ZAPIWhatsAppService:
+    """Wrapper em classe para uso no worker."""
+
+    async def send_text(self, phone: str, message: str) -> dict:
+        return await send_text(phone, message)
+
+    async def send_document(self, phone: str, document_url: str, filename: str) -> dict:
+        return await send_document(phone, document_url, filename)
+
+    async def send_image(self, phone: str, image_url: str, caption: str = "") -> dict:
+        return await send_image(phone, image_url, caption)
