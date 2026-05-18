@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # Número do fundador para notificações de novos cadastros
     founder_phone: str = ""
 
+    # Chave secreta para o dashboard admin (header X-Admin-Key)
+    admin_secret_key: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
