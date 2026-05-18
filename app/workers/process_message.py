@@ -1,19 +1,20 @@
 """
 Worker de processamento de mensagens — pipeline completo (Fases 3-5).
 
-Fluxo:
+Fluxo para números cadastrados:
   1. Carrega mensagem do banco
-  2. Identifica agrônomo pelo telefone
-  3. Verifica plano ativo
-  4. Se áudio: baixa + transcreve com Groq
-  5. Carrega fazendas do agrônomo
-  6. Extrai dados com Claude
-  7. Identifica fazenda/talhão no banco
-  8. Salva Visita no banco
-  9. Gera PDFs (relatório + receituário)
- 10. Upload para Supabase Storage
- 11. Envia resumo + PDFs ao agrônomo via WhatsApp
- 12. Marca mensagem como processada
+  2. Onboarding check (se número em fluxo de cadastro, processa e retorna)
+  3. Identifica agrônomo pelo telefone (se não existe, inicia onboarding)
+  4. Verifica plano ativo
+  5. Se áudio: baixa + transcreve com Groq
+  6. Carrega fazendas do agrônomo
+  7. Extrai dados com Claude
+  8. Identifica fazenda/talhão no banco
+  9. Salva Visita no banco
+ 10. Gera PDFs (relatório + receituário)
+ 11. Upload para Supabase Storage
+ 12. Envia resumo + PDFs ao agrônomo via WhatsApp
+ 13. Marca mensagem como processada
 """
 import asyncio
 import uuid
@@ -31,6 +32,8 @@ from app.models.talhao import Talhao
 from app.models.visita import StatusVisitaEnum, Visita
 from app.services.ai_processor import AIProcessor
 from app.services.icp_brasil import ICPBrasilService
+from app.services.onboarding import OnboardingService, handle_onboarding_step
+from app.services.onboarding import MSGS as ONBOARDING_MSGS
 from app.services.pdf_generator import gerar_receituario, gerar_relatorio
 from app.services.storage import StorageService
 from app.services.transcription import TranscriptionService
@@ -44,6 +47,7 @@ transcription = TranscriptionService()
 ai_processor = AIProcessor()
 storage = StorageService()
 icp = ICPBrasilService()
+onboarding = OnboardingService()
 
 MSG_RECEBIDO = "Recebi! Tô processando sua visita... 🐦"
 
@@ -59,12 +63,6 @@ MSG_INATIVO = (
     "wa.me/5516999999999"
 )
 
-MSG_NAO_CADASTRADO = (
-    "Salve! Aqui é o Ticco 🐦\n\n"
-    "Não te reconheci ainda. Você é agrônomo consultor de café?\n"
-    "Responde *sim* que eu te cadastro rapidinho."
-)
-
 
 async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
     """Pipeline completo: mensagem → visita estruturada."""
@@ -77,14 +75,32 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
 
         phone = mensagem.telefone_origem
 
-        # 2. Identifica agrônomo
+        # Extrai texto da mensagem para uso no onboarding (sem transcrever áudio)
+        texto_recebido = mensagem.conteudo_texto or ""
+
+        # 2. Onboarding check — se número está em fluxo de cadastro, processa e sai
+        if onboarding.is_in_onboarding(phone):
+            await handle_onboarding_step(
+                phone=phone,
+                texto=texto_recebido,
+                db=db,
+                whatsapp=whatsapp,
+                onboarding=onboarding,
+            )
+            mensagem.processada = True
+            await db.commit()
+            return
+
+        # 3. Identifica agrônomo
         result = await db.execute(
             select(Agronomo).where(Agronomo.telefone_wpp == phone)
         )
         agronomo = result.scalar_one_or_none()
 
+        # Número não cadastrado e não em onboarding → inicia cadastro
         if not agronomo:
-            await whatsapp.send_text(phone, MSG_NAO_CADASTRADO)
+            onboarding.start_onboarding(phone)
+            await whatsapp.send_text(phone, ONBOARDING_MSGS["boas_vindas"])
             mensagem.processada = True
             await db.commit()
             return
