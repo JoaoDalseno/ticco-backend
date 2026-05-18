@@ -1,8 +1,9 @@
 FROM python:3.11-slim
 
-# Dependências do sistema para WeasyPrint + fontes
+# Dependências do sistema para xhtml2pdf (pycairo/rlpycairo/svglib)
 RUN apt-get update && apt-get install -y \
     gcc \
+    pkg-config \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     libpangocairo-1.0-0 \

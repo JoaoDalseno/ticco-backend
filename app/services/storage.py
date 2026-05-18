@@ -1,6 +1,7 @@
 """
 Upload de arquivos para o Supabase Storage.
 """
+import asyncio
 import logging
 
 from supabase import create_client
@@ -10,8 +11,23 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 
-def _client():
-    return create_client(settings.supabase_url, settings.supabase_service_role_key)
+def _upload_sync(path: str, pdf_bytes: bytes) -> str:
+    """Executa o upload de forma síncrona (rodado via asyncio.to_thread)."""
+    client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+    bucket = settings.supabase_bucket
+
+    try:
+        client.storage.from_(bucket).remove([path])
+    except Exception:
+        pass  # Ignora se não existia
+
+    client.storage.from_(bucket).upload(
+        path=path,
+        file=pdf_bytes,
+        file_options={"content-type": "application/pdf", "upsert": "true"},
+    )
+
+    return client.storage.from_(bucket).get_public_url(path)
 
 
 async def upload_pdf(path: str, pdf_bytes: bytes) -> str:
@@ -25,21 +41,6 @@ async def upload_pdf(path: str, pdf_bytes: bytes) -> str:
     Returns:
         URL pública do arquivo.
     """
-    client = _client()
-    bucket = settings.supabase_bucket
-
-    # Remove arquivo anterior se existir (upsert)
-    try:
-        client.storage.from_(bucket).remove([path])
-    except Exception:
-        pass  # Ignora se não existia
-
-    client.storage.from_(bucket).upload(
-        path=path,
-        file=pdf_bytes,
-        file_options={"content-type": "application/pdf", "upsert": "true"},
-    )
-
-    url = client.storage.from_(bucket).get_public_url(path)
+    url = await asyncio.to_thread(_upload_sync, path, pdf_bytes)
     logger.info("Upload concluído: %s", url)
     return url
