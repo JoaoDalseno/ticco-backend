@@ -59,9 +59,11 @@ def _msg_pagamento_falhou(link: str) -> str:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _buscar_agronomo_por_customer(
-    customer_id: str, db: AsyncSession
+    customer_id: str | None, db: AsyncSession
 ) -> Agronomo | None:
     """Encontra o agrônomo pelo stripe_customer_id."""
+    if not customer_id:
+        return None
     result = await db.execute(
         select(Agronomo).where(Agronomo.stripe_customer_id == customer_id)
     )
@@ -165,8 +167,20 @@ async def webhook_stripe(
     """
     payload = await request.body()
 
-    # Valida assinatura HMAC — protege contra requisições forjadas
-    if settings.stripe_webhook_secret:
+    # Em produção, exige assinatura HMAC. Em dev, parseia sem validar.
+    if not settings.stripe_webhook_secret:
+        if settings.app_env != "development":
+            logger.error("Stripe webhook: STRIPE_WEBHOOK_SECRET ausente em produção — rejeitando")
+            return {"ok": True}
+        try:
+            import json
+            event = stripe.Event.construct_from(
+                json.loads(payload), stripe.api_key
+            )
+        except Exception as exc:
+            logger.error("Stripe webhook: payload inválido: %s", exc)
+            return {"ok": True}
+    else:
         try:
             event = stripe.Webhook.construct_event(
                 payload=payload,
@@ -178,16 +192,6 @@ async def webhook_stripe(
             return {"ok": True}
         except Exception as exc:
             logger.error("Stripe webhook: erro ao verificar assinatura: %s", exc)
-            return {"ok": True}
-    else:
-        # Sem secret configurado (desenvolvimento) — parseia sem validar
-        try:
-            import json
-            event = stripe.Event.construct_from(
-                json.loads(payload), stripe.api_key
-            )
-        except Exception as exc:
-            logger.error("Stripe webhook: payload inválido: %s", exc)
             return {"ok": True}
 
     event_type: str = event.get("type", "")

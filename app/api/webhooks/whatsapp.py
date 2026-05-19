@@ -95,8 +95,7 @@ async def _processar_em_background(
     async with AsyncSessionLocal() as db:
         try:
             if onboarding.em_onboarding(phone):
-                if texto:
-                    await onboarding.processar_resposta(phone, texto, db)
+                await onboarding.processar_resposta(phone, texto, db)
                 return
 
             if agronomo_id is None:

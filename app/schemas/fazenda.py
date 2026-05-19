@@ -17,7 +17,8 @@ class FazendaBase(BaseModel):
 
 
 class FazendaCreate(FazendaBase):
-    agronomo_id: uuid.UUID
+    """`agronomo_id` é resolvido a partir do JWT — não vem no body."""
+    pass
 
 
 class FazendaUpdate(BaseModel):

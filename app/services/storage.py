@@ -3,12 +3,19 @@ Upload de arquivos para o Supabase Storage.
 """
 import asyncio
 import logging
+from functools import lru_cache
 
-from supabase import create_client
+from supabase import Client, create_client
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _supabase_client() -> Client:
+    """Cliente Supabase cacheado — evita re-handshake a cada upload."""
+    return create_client(settings.supabase_url, settings.supabase_service_role_key)
 
 
 class StorageService:
@@ -16,7 +23,7 @@ class StorageService:
 
     def _upload_sync(self, path: str, pdf_bytes: bytes) -> str:
         """Executa o upload de forma síncrona (rodado via asyncio.to_thread)."""
-        client = create_client(settings.supabase_url, settings.supabase_service_role_key)
+        client = _supabase_client()
         bucket = settings.supabase_bucket
 
         try:

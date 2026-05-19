@@ -1,20 +1,20 @@
 """
-Worker de processamento de mensagens — pipeline completo (Fases 3-5).
+Worker de processamento de mensagens — pipeline da visita.
 
-Fluxo para números cadastrados:
-  1. Carrega mensagem do banco
-  2. Onboarding check (se número em fluxo de cadastro, processa e retorna)
-  3. Identifica agrônomo pelo telefone (se não existe, inicia onboarding)
-  4. Verifica plano ativo
-  5. Se áudio: baixa + transcreve com Groq
-  6. Carrega fazendas do agrônomo
-  7. Extrai dados com Claude
-  8. Identifica fazenda/talhão no banco
-  9. Salva Visita no banco
- 10. Gera PDFs (relatório + receituário)
- 11. Upload para Supabase Storage
- 12. Envia resumo + PDFs ao agrônomo via WhatsApp
- 13. Marca mensagem como processada
+Pré-condição: o webhook já intercepta onboarding e número desconhecido,
+então aqui o agrônomo sempre existe.
+
+Fluxo:
+  1. Carrega mensagem
+  2. Identifica agrônomo + verifica plano ativo
+  3. Comando curto? → ComandoHandler e retorna
+  4. Áudio? → valida URL (SSRF guard), baixa com limite, transcreve
+  5. Carrega fazendas + talhões
+  6. Extrai dados com Claude
+  7. Identifica fazenda/talhão
+  8. Salva Visita
+  9. Gera PDFs + upload Storage
+ 10. Envia resumo + PDFs via WhatsApp
 """
 import asyncio
 import uuid
@@ -31,12 +31,12 @@ from app.models.mensagem import Mensagem
 from app.models.talhao import Talhao
 from app.models.visita import StatusVisitaEnum, Visita
 from app.services.ai_processor import AIProcessor
+from app.services.comando_handler import ComandoHandler
+from app.services.comando_parser import Comando, identificar_comando
 from app.services.icp_brasil import ICPBrasilService
-from app.services.onboarding import OnboardingService, handle_onboarding_step
-from app.services.onboarding import MSGS as ONBOARDING_MSGS
 from app.services.pdf_generator import gerar_receituario, gerar_relatorio
 from app.services.storage import StorageService
-from app.services.transcription import TranscriptionService
+from app.services.transcription import MAX_AUDIO_BYTES, TranscriptionService, validar_url_audio
 from app.services.whatsapp.zapi import ZAPIWhatsAppService
 from app.utils.logger import setup_logger
 
@@ -47,7 +47,6 @@ transcription = TranscriptionService()
 ai_processor = AIProcessor()
 storage = StorageService()
 icp = ICPBrasilService()
-onboarding = OnboardingService()
 
 MSG_RECEBIDO = "Recebi! Tô processando sua visita... 🐦"
 
@@ -74,38 +73,20 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
             return
 
         phone = mensagem.telefone_origem
-
-        # Extrai texto da mensagem para uso no onboarding (sem transcrever áudio)
         texto_recebido = mensagem.conteudo_texto or ""
 
-        # 2. Onboarding check — se número está em fluxo de cadastro, processa e sai
-        if onboarding.is_in_onboarding(phone):
-            await handle_onboarding_step(
-                phone=phone,
-                texto=texto_recebido,
-                db=db,
-                whatsapp=whatsapp,
-                onboarding=onboarding,
-            )
-            mensagem.processada = True
-            await db.commit()
-            return
-
-        # 3. Identifica agrônomo
+        # O webhook intercepta onboarding e cadastro; aqui o agrônomo sempre existe.
         result = await db.execute(
             select(Agronomo).where(Agronomo.telefone_wpp == phone)
         )
         agronomo = result.scalar_one_or_none()
-
-        # Número não cadastrado e não em onboarding → inicia cadastro
         if not agronomo:
-            onboarding.start_onboarding(phone)
-            await whatsapp.send_text(phone, ONBOARDING_MSGS["boas_vindas"])
+            logger.warning("process_message chamado para número sem agrônomo: %s", phone)
             mensagem.processada = True
             await db.commit()
             return
 
-        # 3. Verifica plano ativo
+        # Verifica plano ativo
         planos_ativos = [StatusPagamentoEnum.trial, StatusPagamentoEnum.active]
         if agronomo.status_pagamento not in planos_ativos:
             await whatsapp.send_text(phone, MSG_INATIVO)
@@ -113,18 +94,51 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
             await db.commit()
             return
 
-        # Confirma recebimento imediatamente
-        await whatsapp.send_text(phone, MSG_RECEBIDO)
+        # Comandos de texto curtos (ajuda/historico/fazendas/plano/status/...).
+        # Áudio nunca é comando — sempre vai pro pipeline de visita.
+        if mensagem.tipo.value != "audio":
+            comando = identificar_comando(texto_recebido)
+            if comando != Comando.VISITA:
+                handler = ComandoHandler(db=db, whatsapp=whatsapp)
+                await handler.handle(comando, agronomo)
+                mensagem.processada = True
+                await db.commit()
+                return
 
-        # 4. Se áudio: baixa e transcreve
+        # 4. Se áudio: valida URL, baixa com limite e transcreve
         texto_bruto = mensagem.conteudo_texto or ""
 
         if mensagem.tipo.value == "audio" and mensagem.midia_url:
+            try:
+                validar_url_audio(mensagem.midia_url)
+            except ValueError as e:
+                logger.warning(f"URL de áudio rejeitada ({phone}): {e}")
+                await whatsapp.send_text(
+                    phone,
+                    "Não consegui acessar o áudio. Pode mandar de novo? 🎙️",
+                )
+                mensagem.processada = True
+                await db.commit()
+                return
+
+            await whatsapp.send_text(phone, MSG_RECEBIDO)
+
             logger.info(f"Baixando áudio: {mensagem.midia_url}")
+            audio_bytes = b""
             async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.get(mensagem.midia_url)
-                resp.raise_for_status()
-                audio_bytes = resp.content
+                async with client.stream("GET", mensagem.midia_url) as resp:
+                    resp.raise_for_status()
+                    declared_len = resp.headers.get("content-length")
+                    if declared_len and int(declared_len) > MAX_AUDIO_BYTES:
+                        raise ValueError(
+                            f"Áudio excede limite ({declared_len} > {MAX_AUDIO_BYTES} bytes)"
+                        )
+                    async for chunk in resp.aiter_bytes():
+                        audio_bytes += chunk
+                        if len(audio_bytes) > MAX_AUDIO_BYTES:
+                            raise ValueError(
+                                f"Áudio excedeu {MAX_AUDIO_BYTES} bytes durante download"
+                            )
 
             texto_bruto = await transcription.transcribe(
                 audio_bytes=audio_bytes,
@@ -134,6 +148,9 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
             mensagem.transcricao = texto_bruto
             await db.commit()
             logger.info(f"Transcrição: {texto_bruto[:100]}...")
+        else:
+            # Texto longo (visita): confirma recebimento
+            await whatsapp.send_text(phone, MSG_RECEBIDO)
 
         if not texto_bruto.strip():
             await whatsapp.send_text(

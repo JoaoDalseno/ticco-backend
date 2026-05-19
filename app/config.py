@@ -61,3 +61,10 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+# Limites de fazendas por plano (regra de negócio — não configurável via env)
+LIMITE_FAZENDAS: dict[str, int] = {
+    "free": 1,
+    "basico": 10,
+    "completo": 20,
+}

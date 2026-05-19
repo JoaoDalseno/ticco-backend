@@ -13,10 +13,10 @@ from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-_MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB — limite da API Groq/OpenAI
+MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB — limite da API Groq/OpenAI
 
 
-def _validar_url_audio(url: str) -> None:
+def validar_url_audio(url: str) -> None:
     """Previne SSRF: aceita apenas HTTPS para domínios públicos."""
     parsed = urlparse(url)
     if parsed.scheme != "https":

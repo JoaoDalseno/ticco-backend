@@ -103,6 +103,10 @@ def _msg_boas_vindas_final(nome: str) -> str:
 
 MSG_CPF_INVALIDO = "CPF inválido. Por favor, informe os 11 dígitos do seu CPF:"
 MSG_CREA_INVALIDO = "CREA inválido. Informe no formato SP-123456/D ou similar:"
+MSG_PEDE_TEXTO = (
+    "Pra finalizar seu cadastro, por favor *escreva como texto*. "
+    "Ainda não consigo entender áudios nessa etapa. 🙏"
+)
 
 
 # ── Lógica principal ─────────────────────────────────────────────────────────
@@ -114,7 +118,7 @@ async def iniciar(phone: str) -> None:
     await zapi.send_text(phone, BOAS_VINDAS)
 
 
-async def processar_resposta(phone: str, texto: str, db: AsyncSession) -> None:
+async def processar_resposta(phone: str, texto: str | None, db: AsyncSession) -> None:
     """Processa a resposta do usuário na etapa atual do onboarding."""
     estado = _estados.get(phone)
     if not estado:
@@ -123,7 +127,12 @@ async def processar_resposta(phone: str, texto: str, db: AsyncSession) -> None:
 
     etapa = estado["etapa"]
     dados = estado["dados"]
-    texto = texto.strip()
+    texto = (texto or "").strip()
+
+    # Sem texto (ex: áudio durante onboarding) — orienta a escrever
+    if not texto:
+        await zapi.send_text(phone, MSG_PEDE_TEXTO)
+        return
 
     if etapa == Etapa.NOME:
         if len(texto) < 3:
