@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.config import settings
+from app.core.rate_limiter import check_rate_limit
 from app.database import AsyncSessionLocal
 from app.models.agronomo import Agronomo
 from app.models.mensagem import DirecaoEnum, Mensagem, TipoEnum
@@ -135,6 +136,13 @@ async def webhook_whatsapp(
     phone = _normalizar_phone(payload.phone)
     if not phone:
         return {"ok": True}
+
+    # ── Rate limit por telefone ───────────────────────────────────────────────
+    allowed, motivo = check_rate_limit(phone)
+    if not allowed:
+        # Não responde ao usuário — evita loop de feedback
+        logger.warning("Mensagem bloqueada por rate limit — phone=%s motivo=%s", _mask(phone), motivo)
+        return {"status": "rate_limited"}
 
     tipo, conteudo_texto, midia_url = _extrair_tipo_e_conteudo(payload)
 

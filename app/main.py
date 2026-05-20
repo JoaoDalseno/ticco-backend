@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 from app.config import settings
 from app.api.admin import router as admin_router
@@ -12,6 +14,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.fazendas import router as fazendas_router
 from app.api.webhooks.stripe import router as stripe_router
 from app.api.webhooks.whatsapp import router as whatsapp_router
+from app.core.rate_limiter import limiter
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -36,6 +39,10 @@ app = FastAPI(
     docs_url="/docs" if settings.app_env == "development" else None,
     redoc_url="/redoc" if settings.app_env == "development" else None,
 )
+
+# Rate limiter (slowapi — por IP)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

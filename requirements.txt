@@ -35,6 +35,9 @@ PyJWT>=2.8.0
 # Pagamentos
 stripe>=10.0.0
 
+# Rate limiting
+slowapi>=0.1.9
+
 # Utilitários
 python-multipart>=0.0.12
 python-dotenv>=1.0.0
