@@ -39,9 +39,15 @@ class Settings(BaseSettings):
     zapi_base_url: str = "https://api.z-api.io"
     zapi_security_token: str = ""
 
+    # Frontend (usado em redirects do Stripe Checkout)
+    frontend_url: str = "http://localhost:3000"
+
     # Stripe
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    # Price IDs do Stripe Dashboard → Products → Prices
+    stripe_price_basico: str = ""
+    stripe_price_completo: str = ""
 
     # JWT
     jwt_secret: str

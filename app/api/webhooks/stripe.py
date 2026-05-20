@@ -4,9 +4,10 @@ Webhook Stripe — trata eventos de assinatura e pagamento.
 Endpoint: POST /webhooks/stripe
 
 Eventos tratados:
-  customer.subscription.created  → ativa plano
-  customer.subscription.deleted  → cancela plano
-  invoice.payment_failed         → marca como inadimplente
+  customer.subscription.created   → ativa plano (primeira assinatura)
+  customer.subscription.deleted   → cancela plano
+  invoice.payment_succeeded       → reativa conta inadimplente em dia
+  invoice.payment_failed          → marca como inadimplente
   customer.subscription.trial_will_end → avisa fim do trial
 
 Sempre retorna 200 para evitar reenvios infinitos pela Stripe.
@@ -47,6 +48,12 @@ MSG_TRIAL_ENDING = (
     "Seu trial acaba em 3 dias. ⏰\n\n"
     "Assina aqui pra continuar usando o Ticco:\n"
     "ticco.com.br/#preco"
+)
+
+
+MSG_REATIVADO = (
+    "Seu pagamento foi confirmado! ✅\n\n"
+    "Sua conta Ticco está ativa novamente. Pode continuar registrando visitas! 🐦"
 )
 
 
@@ -147,6 +154,39 @@ async def _handle_payment_failed(
     await whatsapp.send_text(agronomo.telefone_wpp, _msg_pagamento_falhou(link))
 
 
+async def _handle_payment_succeeded(
+    event: stripe.Event, db: AsyncSession
+) -> None:
+    """
+    Trata pagamento de fatura bem-sucedido (invoice.payment_succeeded).
+
+    Casos de uso:
+      - Renovação mensal de assinatura ativa → só loga (sem ruído no WhatsApp)
+      - Conta que estava inadimplente (past_due) paga a fatura em atraso
+        → reativa para 'active' e avisa o agrônomo
+    """
+    invoice = event.data.object
+    customer_id = invoice.get("customer")
+    agronomo = await _buscar_agronomo_por_customer(customer_id, db)
+    if not agronomo:
+        logger.warning("payment_succeeded: customer %s não encontrado", customer_id)
+        return
+
+    if agronomo.status_pagamento == StatusPagamentoEnum.past_due:
+        await _atualizar_status(agronomo, StatusPagamentoEnum.active, db)
+        await whatsapp.send_text(agronomo.telefone_wpp, MSG_REATIVADO)
+        logger.info(
+            "Conta reativada após pagamento em atraso — agrônomo=%s", agronomo.nome
+        )
+    else:
+        # Renovação normal — loga silenciosamente, não envia WhatsApp
+        logger.info(
+            "Pagamento de renovação confirmado — agrônomo=%s status=%s",
+            agronomo.nome,
+            agronomo.status_pagamento.value,
+        )
+
+
 async def _handle_trial_will_end(
     event: stripe.Event, db: AsyncSession
 ) -> None:
@@ -163,6 +203,7 @@ async def _handle_trial_will_end(
 _HANDLERS = {
     "customer.subscription.created": _handle_subscription_created,
     "customer.subscription.deleted": _handle_subscription_deleted,
+    "invoice.payment_succeeded": _handle_payment_succeeded,
     "invoice.payment_failed": _handle_payment_failed,
     "customer.subscription.trial_will_end": _handle_trial_will_end,
 }
