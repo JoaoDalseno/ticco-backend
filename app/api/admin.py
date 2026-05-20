@@ -9,7 +9,7 @@ import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +19,7 @@ from app.config import LIMITE_FAZENDAS, settings
 from app.models.agronomo import Agronomo, StatusPagamentoEnum
 from app.models.fazenda import Fazenda
 from app.models.visita import StatusVisitaEnum, Visita
+from app.workers.briefing_semanal import enviar_briefings_semanais
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -273,6 +274,25 @@ async def admin_listar_visitas(
     )
     visitas = list(result.scalars().all())
     return await _visitas_to_schemas(visitas, db)
+
+
+# ── Briefing manual ───────────────────────────────────────────────────────────
+
+@router.post("/briefing/executar")
+async def executar_briefing_manual(
+    background_tasks: BackgroundTasks,
+    _: None = Depends(_verificar_admin),
+) -> dict:
+    """
+    Dispara o briefing semanal manualmente em background.
+    Útil pra testar sem esperar segunda-feira.
+    Requer header X-Admin-Key.
+    """
+    background_tasks.add_task(enviar_briefings_semanais)
+    return {
+        "status": "iniciado",
+        "mensagem": "Briefings sendo enviados em background",
+    }
 
 
 class StatusUpdate(BaseModel):

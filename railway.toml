@@ -1,10 +1,33 @@
+# railway.toml — configuração de deploy no Railway
+#
+# Dois serviços no mesmo repositório:
+#   api          → servidor FastAPI (sempre rodando)
+#   briefing-cron → worker de briefing semanal (cron: segunda 8h Brasília = 11h UTC)
+#
+# Referência Railway: https://docs.railway.app/reference/config-as-code
+
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
-[deploy]
+# ── API (serviço principal) ───────────────────────────────────────────────────
+
+[[services]]
+name = "api"
 startCommand = "sh -c 'uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2'"
+
+[services.deploy]
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+# ── Briefing semanal (cron) ───────────────────────────────────────────────────
+# Roda toda segunda-feira às 11h UTC = 8h Brasília (UTC-3)
+# Cron: min hora dom mês dia-semana
+#         0   11   *   *      1
+
+[[services]]
+name = "briefing-cron"
+cronSchedule = "0 11 * * 1"
+startCommand = "python -m app.workers.briefing_semanal"
