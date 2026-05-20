@@ -34,6 +34,7 @@ from app.services.ai_processor import AIProcessor
 from app.services.comando_handler import ComandoHandler
 from app.services.comando_parser import Comando, identificar_comando
 from app.services.icp_brasil import ICPBrasilService
+from app.services.notificacao_fundador import NotificacaoFundador
 from app.services.pdf_generator import gerar_receituario, gerar_relatorio
 from app.services.storage import StorageService
 from app.services.transcription import MAX_AUDIO_BYTES, TranscriptionService, validar_url_audio
@@ -65,6 +66,10 @@ MSG_INATIVO = (
 
 async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
     """Pipeline completo: mensagem → visita estruturada."""
+    # Rastreia contexto para o bloco except — podem não ser definidos se o erro ocorrer cedo
+    _agronomo_nome: str = "Desconhecido"
+    _agronomo_phone: str = "desconhecido"
+
     try:
         # 1. Carrega mensagem
         mensagem = await db.get(Mensagem, mensagem_id)
@@ -85,6 +90,10 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
             mensagem.processada = True
             await db.commit()
             return
+
+        # Atualiza contexto para notificações de erro
+        _agronomo_nome = agronomo.nome
+        _agronomo_phone = phone
 
         # Verifica plano ativo
         planos_ativos = [StatusPagamentoEnum.trial, StatusPagamentoEnum.active]
@@ -331,5 +340,17 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
                 await whatsapp.send_text(mensagem.telefone_origem, MSG_ERRO)
                 mensagem.processada = True
                 await db.commit()
+        except Exception:
+            pass
+
+        # Notifica fundador — falha silenciosa (não propaga)
+        try:
+            notificador = NotificacaoFundador(whatsapp)
+            await notificador.erro_pipeline(
+                agronomo_nome=_agronomo_nome,
+                agronomo_phone=_agronomo_phone,
+                erro=str(e),
+                mensagem_id=str(mensagem_id),
+            )
         except Exception:
             pass

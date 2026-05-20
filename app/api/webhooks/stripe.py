@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.agronomo import Agronomo, StatusPagamentoEnum
+from app.services.notificacao_fundador import NotificacaoFundador
 from app.services.whatsapp.zapi import ZAPIWhatsAppService
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,19 @@ async def _handle_subscription_created(
     agronomo.stripe_subscription_id = subscription.get("id")
     await _atualizar_status(agronomo, StatusPagamentoEnum.active, db)
     await whatsapp.send_text(agronomo.telefone_wpp, MSG_ATIVADO)
+
+    # Notifica fundador sobre novo pagamento
+    try:
+        _VALORES_PLANO: dict[str, float] = {"basico": 199.0, "completo": 349.0}
+        valor = _VALORES_PLANO.get(agronomo.plano.value, 0.0)
+        notificador = NotificacaoFundador(whatsapp)
+        await notificador.novo_pagamento(
+            nome=agronomo.nome,
+            plano=agronomo.plano.value,
+            valor=valor,
+        )
+    except Exception:
+        logger.debug("Falha ao notificar fundador sobre pagamento (não crítico)")
 
 
 async def _handle_subscription_deleted(

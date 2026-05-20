@@ -15,7 +15,11 @@ from enum import Enum
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agronomo import Agronomo, PlanoEnum, StatusPagamentoEnum
+from app.services.notificacao_fundador import NotificacaoFundador
 from app.services.whatsapp import zapi
+from app.services.whatsapp.zapi import ZAPIWhatsAppService
+
+_whatsapp_svc = ZAPIWhatsAppService()
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +188,18 @@ async def _criar_agronomo(phone: str, dados: dict, db: AsyncSession) -> None:
         await db.commit()
         logger.info("Novo agrônomo criado via onboarding: %s (%s)", agronomo.nome, _mask(phone))
         await zapi.send_text(phone, _msg_boas_vindas_final(agronomo.nome))
+
+        # Notifica fundador — cidade não é coletada no onboarding; usa fallback
+        try:
+            notificador = NotificacaoFundador(_whatsapp_svc)
+            await notificador.novo_cadastro(
+                nome=agronomo.nome,
+                crea=agronomo.crea,
+                cidade=dados.get("cidade", "—"),
+                phone=phone,
+            )
+        except Exception:
+            logger.debug("Falha ao notificar fundador sobre novo cadastro (não crítico)")
     except Exception:
         await db.rollback()
         logger.exception("Erro ao criar agrônomo via onboarding: %s", _mask(phone))
