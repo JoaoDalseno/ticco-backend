@@ -63,6 +63,13 @@ def _e(value: str | None) -> str:
     return html.escape(str(value or ""), quote=True)
 
 
+# Constantes usadas dentro de expressões f-string.
+# Backslashes não são permitidos dentro de {} em Python < 3.12,
+# por isso as aspas duplas ficam fora da f-string.
+_SMALL_OPEN = '<br><small style="color:#666">'
+_SMALL_CLOSE = "</small>"
+
+
 def _badge(severidade: str) -> str:
     cls = _e(severidade.lower())
     return f'<span class="badge badge-{cls}">{_e(severidade.upper())}</span>'
@@ -90,7 +97,7 @@ def _html_relatorio(
         rows = "".join(
             f"<tr>"
             f"<td>{_e(p.nome_popular)}"
-            f"{'<br><small style=\"color:#666\">' + _e(p.nome_cientifico) + '</small>' if p.nome_cientifico else ''}"
+            f"{_SMALL_OPEN + _e(p.nome_cientifico) + _SMALL_CLOSE if p.nome_cientifico else ''}"
             f"</td>"
             f"<td>{_badge(p.severidade)}</td>"
             f"<td>{_e(str(p.area_afetada_ha)) + ' ha' if p.area_afetada_ha else '—'}</td>"
@@ -126,7 +133,7 @@ def _html_relatorio(
         rows = "".join(
             f"<tr>"
             f"<td>{_e(r.produto_sugerido)}"
-            f"{'<br><small style=\"color:#666\">' + _e(r.ingrediente_ativo) + '</small>' if r.ingrediente_ativo else ''}"
+            f"{_SMALL_OPEN + _e(r.ingrediente_ativo) + _SMALL_CLOSE if r.ingrediente_ativo else ''}"
             f"</td>"
             f"<td>{_e(r.dose) if r.dose else '—'}</td>"
             f"<td>{_e(str(r.area_ha)) + ' ha' if r.area_ha else '—'}</td>"
