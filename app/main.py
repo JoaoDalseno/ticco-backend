@@ -13,6 +13,7 @@ from app.api.health import router as health_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.checkout import router as checkout_router
 from app.api.v1.fazendas import router as fazendas_router
+from app.api.webhooks.clicksign import router as clicksign_router
 from app.api.webhooks.stripe import router as stripe_router
 from app.api.webhooks.whatsapp import router as whatsapp_router
 from app.core.rate_limiter import limiter
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(health_router, tags=["infra"])
 app.include_router(whatsapp_router, tags=["webhooks"])
 app.include_router(stripe_router, tags=["webhooks"])
+app.include_router(clicksign_router, tags=["webhooks"])
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(checkout_router)

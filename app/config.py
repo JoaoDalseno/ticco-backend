@@ -65,6 +65,13 @@ class Settings(BaseSettings):
     # Chave secreta para o dashboard admin (header X-Admin-Key)
     admin_secret_key: str = ""
 
+    # ── ICP-Brasil / ClickSign ────────────────────────────────────────────────
+    # Feature flag — False = mock, True = ClickSign real
+    icp_brasil_enabled: bool = False
+    clicksign_api_key: str = ""
+    clicksign_base_url: str = "https://app.clicksign.com/api/v1"
+    clicksign_webhook_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -32,6 +32,9 @@ class Receituario(Base, TimestampMixin):
     produtos: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     hash_assinatura: Mapped[str | None] = mapped_column(String(200), nullable=True)
     pdf_assinado_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Chaves ClickSign — populadas quando ICP_BRASIL_ENABLED=True
+    clicksign_envelope_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    clicksign_signer_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     enviado_para_revenda: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     status: Mapped[StatusReceituarioEnum] = mapped_column(
         Enum(StatusReceituarioEnum, name="status_receituario_enum"),
