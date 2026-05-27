@@ -131,7 +131,10 @@ async def test_com_visitas_chama_claude_e_envia():
     ):
         await processar_briefing_fazenda(fazenda, mock_db)
 
-    mock_wpp.send_text.assert_awaited_once_with(fazenda.dono_wpp, resumo_esperado)
+    # O worker agora append o rodapé de contato ao resumo antes de enviar
+    from app.config import settings
+    resumo_com_footer = resumo_esperado + f"\n\n_Dúvidas? {settings.contact_email}_"
+    mock_wpp.send_text.assert_awaited_once_with(fazenda.dono_wpp, resumo_com_footer)
 
 
 # ── gerar_resumo_semanal ──────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ from datetime import date
 
 import weasyprint
 
+from app.config import settings
 from app.models.agronomo import Agronomo
 from app.models.fazenda import Fazenda
 from app.models.talhao import Talhao
@@ -204,7 +205,7 @@ def _html_relatorio(
   </div>
 
   <div class="footer">
-    Documento gerado pelo sistema Ticco — {_data_fmt(date.today())}
+    Documento gerado pelo sistema Ticco — useticco.com — {settings.contact_email} — {_data_fmt(date.today())}
   </div>
 </body></html>"""
 
@@ -306,7 +307,7 @@ def _html_receituario(
 
   <div class="footer">
     Este receituário é válido para uma única aplicação na propriedade acima identificada.<br>
-    Documento gerado pelo sistema Ticco — {_data_fmt(date.today())}
+    Documento gerado pelo sistema Ticco — useticco.com — {settings.contact_email} — {_data_fmt(date.today())}
   </div>
 </body></html>"""
 

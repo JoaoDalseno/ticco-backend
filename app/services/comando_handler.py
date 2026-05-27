@@ -9,7 +9,7 @@ from datetime import datetime
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import LIMITE_FAZENDAS
+from app.config import LIMITE_FAZENDAS, settings
 from app.models.agronomo import Agronomo
 from app.models.fazenda import Fazenda
 from app.models.visita import StatusVisitaEnum, Visita
@@ -53,8 +53,8 @@ class ComandoHandler:
             f"💳 *plano* — ver seu plano atual\n"
             f"👤 *status* — ver sua conta\n"
             f"❓ *ajuda* — ver esse menu\n\n"
-            f"_Qualquer problema fala com o João:_\n"
-            f"wa.me/5516999999999"
+            f"_Qualquer problema fala com a gente:_\n"
+            f"{settings.contact_email}"
         )
         await self.whatsapp.send_text(agronomo.telefone_wpp, msg)
 
@@ -254,7 +254,7 @@ class ComandoHandler:
                 f"{ultima.data_visita.strftime('%d/%m/%Y')}\n\n"
             )
 
-        msg += "_Manda 'ajuda' pra ver todos os comandos_"
+        msg += f"_Manda 'ajuda' pra ver todos os comandos_\n\nEmail: {settings.contact_email}"
         await self.whatsapp.send_text(agronomo.telefone_wpp, msg)
 
     async def cmd_saudacao(self, agronomo: Agronomo) -> None:

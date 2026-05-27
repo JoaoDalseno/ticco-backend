@@ -14,6 +14,7 @@ from enum import Enum
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.agronomo import Agronomo, PlanoEnum, StatusPagamentoEnum
 from app.services.notificacao_fundador import NotificacaoFundador
 from app.services.whatsapp import zapi
@@ -102,7 +103,8 @@ def _msg_boas_vindas_final(nome: str) -> str:
         f"✅ Cadastro concluído! Bem-vindo, *{nome}*!\n\n"
         "Você está no plano *trial* por 14 dias.\n\n"
         "Para registrar uma visita técnica, basta me enviar um áudio ou texto "
-        "descrevendo o que observou na lavoura. Pode começar! ☕"
+        "descrevendo o que observou na lavoura. Pode começar! ☕\n\n"
+        f"_Dúvidas? {settings.contact_email}_"
     )
 
 MSG_CPF_INVALIDO = "CPF inválido. Por favor, informe os 11 dígitos do seu CPF:"

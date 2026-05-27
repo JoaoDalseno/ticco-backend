@@ -41,7 +41,7 @@ MSG_ATIVADO = (
 
 MSG_CANCELADO = (
     "Sua assinatura foi cancelada. 😕\n\n"
-    "Se foi engano, fala com o João diretamente."
+    f"Quer reativar? Fala com a gente:\n{settings.contact_email}"
 )
 
 MSG_TRIAL_ENDING = (
@@ -60,7 +60,8 @@ MSG_REATIVADO = (
 def _msg_pagamento_falhou(link: str) -> str:
     return (
         "Tivemos um problema no seu pagamento. 😟\n\n"
-        f"Atualiza o cartão no link:\n{link}"
+        f"Atualiza o cartão no link:\n{link}\n\n"
+        f"Dúvidas? {settings.contact_email}"
     )
 
 

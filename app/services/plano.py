@@ -7,7 +7,7 @@ mensagens de limite e avisos preventivos via WhatsApp.
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import LIMITE_FAZENDAS
+from app.config import LIMITE_FAZENDAS, settings
 from app.models.agronomo import Agronomo
 from app.models.fazenda import Fazenda
 
@@ -46,14 +46,14 @@ class PlanoService:
                 f"Pra cadastrar mais fazendas, faz upgrade "
                 f"pro *Ticco Completo* (até 20 fazendas):\n"
                 f"ticco.com.br/#preco\n\n"
-                f"Ou fala com o João pra te ajudar:\n"
-                f"wa.me/5516999999999"
+                f"Ou entra em contato com a gente:\n"
+                f"{settings.contact_email}"
             )
         return (
             f"Você atingiu o limite de *{limite} fazendas* "
             f"do seu plano. 😕\n\n"
-            f"Precisa de mais fazendas? Fala com o João:\n"
-            f"wa.me/5516999999999"
+            f"Precisa de mais fazendas? Fala com a gente:\n"
+            f"{settings.contact_email}"
         )
 
     @staticmethod

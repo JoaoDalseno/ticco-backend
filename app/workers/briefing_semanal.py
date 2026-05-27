@@ -14,6 +14,7 @@ from datetime import date, timedelta
 import anthropic
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.agronomo import Agronomo
 from app.models.fazenda import Fazenda
@@ -95,7 +96,8 @@ async def processar_briefing_fazenda(fazenda: Fazenda, db) -> None:
             f"Bom dia! 🌱\n\n"
             f"*Resumo semanal — {fazenda.nome}*\n\n"
             f"Nenhuma visita técnica registrada essa semana.\n\n"
-            f"_Seu agrônomo: {agronomo_nome}_"
+            f"_Seu agrônomo: {agronomo_nome}_\n\n"
+            f"_Dúvidas? {settings.contact_email}_"
         )
         await whatsapp.send_text(fazenda.dono_wpp, msg)
         logger.info(
@@ -111,6 +113,7 @@ async def processar_briefing_fazenda(fazenda: Fazenda, db) -> None:
         agronomo=agronomo,
     )
 
+    resumo += f"\n\n_Dúvidas? {settings.contact_email}_"
     await whatsapp.send_text(fazenda.dono_wpp, resumo)
     logger.info(
         "Briefing enviado — fazenda=%s dono=%s visitas=%d",

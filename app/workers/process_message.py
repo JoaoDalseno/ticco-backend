@@ -24,6 +24,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.agronomo import Agronomo, StatusPagamentoEnum
 from app.models.fazenda import Fazenda
@@ -54,13 +55,12 @@ MSG_RECEBIDO = "Recebi! Tô processando sua visita... 🐦"
 MSG_ERRO = (
     "Opa, tive um problema aqui 😅\n"
     "Não consegui processar sua mensagem.\n"
-    "Pode tentar de novo? Se persistir, chama o João."
+    f"Pode tentar de novo? Se persistir: {settings.contact_email}"
 )
 
 MSG_INATIVO = (
     "Opa! Sua conta ainda não tá ativa. 😕\n"
-    "Fala com o João pra ativar:\n"
-    "wa.me/5516999999999"
+    f"Fala com a gente pra ativar:\n{settings.contact_email}"
 )
 
 

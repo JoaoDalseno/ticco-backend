@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # Número do fundador para notificações de novos cadastros
     founder_phone: str = ""
 
+    # Emails públicos do produto
+    contact_email: str = "ola@useticco.com"
+    founder_email: str = "joao@useticco.com"
+    noreply_email: str = "noreply@useticco.com"
+
     # Chave secreta para o dashboard admin (header X-Admin-Key)
     admin_secret_key: str = ""
 
