@@ -8,18 +8,22 @@ Eventos tratados:
   auto_close → todos assinaram e o documento foi fechado automaticamente
 
 Fluxo ao receber evento válido:
-  1. Valida o payload (event.name in {"sign", "auto_close"})
-  2. Busca Receituario pelo clicksign_envelope_key
-  3. Baixa o PDF assinado via ClickSign API
-  4. Faz upload pro Supabase Storage
-  5. Atualiza Receituario no banco (pdf_assinado_url, status="assinado")
+  1. Valida assinatura HMAC-SHA256 (Content-Hmac)
+  2. Valida o payload (event.name in {"sign", "auto_close"})
+  3. Busca Receituario pelo clicksign_envelope_key
+  4. Baixa o PDF assinado via ClickSign API
+  5. Faz upload pro Supabase Storage
+  6. Atualiza Receituario no banco (pdf_assinado_url, status="assinado")
 
-Sempre retorna 200 para evitar que a ClickSign reenvie o evento em loop.
+Sempre retorna 200 após validação para evitar que a ClickSign reenvie o evento.
 """
+import hashlib
+import hmac
+import json
 import logging
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,14 +39,43 @@ _storage = StorageService()
 _CLICKSIGN_TIMEOUT = 30.0
 
 
+def _validar_hmac(payload_bytes: bytes, received_hmac: str) -> bool:
+    """Verifica o HMAC-SHA256 do payload contra settings.clicksign_webhook_secret."""
+    expected = hmac.new(
+        settings.clicksign_webhook_secret.encode(),
+        payload_bytes,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(received_hmac, f"sha256={expected}")
+
+
 @router.post("/clicksign")
 async def webhook_clicksign(request: Request) -> dict:
     """
     Recebe eventos da ClickSign.
-    Sempre retorna 200 para evitar reenvios infinitos.
+    Valida HMAC antes de processar. Retorna 200 após validação bem-sucedida.
     """
+    payload_bytes = await request.body()
+
+    # ── Verificação de assinatura HMAC-SHA256 (A08 — Software/Data Integrity) ──
+    if settings.clicksign_webhook_secret:
+        received_hmac = request.headers.get("Content-Hmac", "")
+        if not received_hmac or not _validar_hmac(payload_bytes, received_hmac):
+            logger.warning(
+                "[ICP] Webhook ClickSign: HMAC inválido ou ausente — "
+                "ip=%s hmac_recebido=%s",
+                request.client.host if request.client else "unknown",
+                received_hmac[:20] if received_hmac else "(vazio)",
+            )
+            raise HTTPException(status_code=401, detail="Invalid HMAC")
+    else:
+        logger.warning(
+            "[ICP] CLICKSIGN_WEBHOOK_SECRET não configurado — "
+            "webhook recebido sem validação de assinatura"
+        )
+
     try:
-        payload = await request.json()
+        payload = json.loads(payload_bytes)
     except Exception as exc:
         logger.error("[ICP] Webhook ClickSign: payload inválido — %s", exc)
         return {"ok": True}

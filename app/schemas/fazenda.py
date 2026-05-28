@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class FazendaBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nome: str = Field(..., min_length=2, max_length=200)
     dono_nome: str = Field(..., min_length=2, max_length=200)
     dono_wpp: str | None = Field(None, pattern=r"^\+55\d{10,11}$")
@@ -22,6 +24,8 @@ class FazendaCreate(FazendaBase):
 
 
 class FazendaUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nome: str | None = None
     dono_nome: str | None = None
     dono_wpp: str | None = None

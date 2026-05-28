@@ -1,0 +1,29 @@
+repos:
+  # Detecta segredos hardcoded antes do commit
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^(\.secrets\.baseline|tests/|\.env\.example)
+
+  # SAST — análise estática de segurança Python
+  - repo: https://github.com/PyCQA/bandit
+    rev: '1.7.7'
+    hooks:
+      - id: bandit
+        args: ['-ll', '-ii']
+        exclude: ^tests/
+
+  # Hooks gerais de qualidade
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-yaml
+      - id: check-toml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace

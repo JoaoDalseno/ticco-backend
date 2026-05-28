@@ -15,7 +15,7 @@ Sempre retorna 200 para evitar reenvios infinitos pela Stripe.
 import logging
 
 import stripe
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -237,18 +237,23 @@ async def webhook_stripe(
             logger.error("Stripe webhook: payload inválido: %s", exc)
             return {"ok": True}
     else:
+        if not stripe_signature:
+            logger.warning(
+                "[STRIPE] Webhook recebido sem header Stripe-Signature — rejeitado"
+            )
+            raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
         try:
             event = stripe.Webhook.construct_event(
                 payload=payload,
-                sig_header=stripe_signature or "",
+                sig_header=stripe_signature,
                 secret=settings.stripe_webhook_secret,
             )
         except stripe.SignatureVerificationError:
-            logger.warning("Stripe webhook: assinatura inválida")
-            return {"ok": True}
+            logger.warning("[STRIPE] Assinatura inválida no webhook — possível spoofing")
+            raise HTTPException(status_code=400, detail="Invalid Stripe signature")
         except Exception as exc:
-            logger.error("Stripe webhook: erro ao verificar assinatura: %s", exc)
-            return {"ok": True}
+            logger.error("[STRIPE] Erro ao verificar assinatura: %s", exc)
+            raise HTTPException(status_code=400, detail="Invalid payload")
 
     event_type: str = event.get("type", "")
     handler = _HANDLERS.get(event_type)

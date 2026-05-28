@@ -1,0 +1,134 @@
+[
+  {
+    "id": "TICCO-SEC-001",
+    "category": "webhooks",
+    "owasp": "A08",
+    "severity": "critical",
+    "title": "Webhook ClickSign sem verificação de assinatura HMAC-SHA256",
+    "file": "app/api/webhooks/clicksign.py",
+    "line": 38,
+    "status": "fixed",
+    "fix_description": "Adicionado _validar_hmac() com hmac.compare_digest; 401 se HMAC ausente ou inválido quando CLICKSIGN_WEBHOOK_SECRET configurado"
+  },
+  {
+    "id": "TICCO-SEC-002",
+    "category": "cors-headers",
+    "owasp": "A05",
+    "severity": "high",
+    "title": "Headers de segurança HTTP ausentes em todas as respostas",
+    "file": "app/main.py",
+    "line": 49,
+    "status": "fixed",
+    "fix_description": "Adicionado SecurityHeadersMiddleware: X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy, X-XSS-Protection, Server: Ticco, HSTS em produção"
+  },
+  {
+    "id": "TICCO-SEC-003",
+    "category": "rate-limit",
+    "owasp": "A04",
+    "severity": "high",
+    "title": "Sem cota diária de visitas — agrônomo pode gerar custo ilimitado de IA",
+    "file": "app/workers/process_message.py",
+    "line": 67,
+    "status": "fixed",
+    "fix_description": "Adicionado _verificar_cota_diaria() com limites por plano: free=5, basico=30, completo=80 visitas/dia; retorna MSG_COTA_ATINGIDA via WhatsApp se exceder"
+  },
+  {
+    "id": "TICCO-SEC-004",
+    "category": "dos",
+    "owasp": "A04",
+    "severity": "high",
+    "title": "Sem limite de tamanho do request body — suscetível a DoS por payload gigante",
+    "file": "app/main.py",
+    "line": 49,
+    "status": "fixed",
+    "fix_description": "Adicionado BodySizeLimitMiddleware: rejeita com 413 se Content-Length > 30 MB"
+  },
+  {
+    "id": "TICCO-SEC-005",
+    "category": "logging",
+    "owasp": "A09",
+    "severity": "medium",
+    "title": "Exceções não tratadas expõem stacktrace completo em produção",
+    "file": "app/main.py",
+    "line": 0,
+    "status": "fixed",
+    "fix_description": "Adicionado global_exception_handler: em produção retorna apenas error_id + mensagem genérica; em dev retorna detalhes para depuração"
+  },
+  {
+    "id": "TICCO-SEC-006",
+    "category": "cors-headers",
+    "owasp": "A05",
+    "severity": "medium",
+    "title": "CORS permite http://localhost:3000 em qualquer ambiente, incluindo produção",
+    "file": "app/main.py",
+    "line": 51,
+    "status": "fixed",
+    "fix_description": "CORS origins agora condicional: produção só aceita ticco.com.br e ticco-henna.vercel.app; localhost apenas em development"
+  },
+  {
+    "id": "TICCO-SEC-007",
+    "category": "auth-jwt",
+    "owasp": "A07",
+    "severity": "medium",
+    "title": "JWT decodificado sem exigir claim 'iat' — permite tokens sem timestamp de emissão",
+    "file": "app/core/security.py",
+    "line": 40,
+    "status": "fixed",
+    "fix_description": "Adicionado 'iat' à lista require nas options do jwt.decode: options={'require': ['sub', 'exp', 'iat']}"
+  },
+  {
+    "id": "TICCO-SEC-008",
+    "category": "input-validation",
+    "owasp": "A03",
+    "severity": "medium",
+    "title": "FazendaBase e FazendaUpdate sem extra='forbid' — aceita campos arbitrários no body",
+    "file": "app/schemas/fazenda.py",
+    "line": 7,
+    "status": "fixed",
+    "fix_description": "Adicionado model_config = ConfigDict(extra='forbid') em FazendaBase e FazendaUpdate"
+  },
+  {
+    "id": "TICCO-SEC-009",
+    "category": "misconfiguration",
+    "owasp": "A05",
+    "severity": "medium",
+    "title": "/openapi.json acessível em produção — expõe schema completo da API",
+    "file": "app/main.py",
+    "line": 35,
+    "status": "fixed",
+    "fix_description": "Adicionado openapi_url=None quando app_env=production; docs_url e redoc_url já estavam controlados"
+  },
+  {
+    "id": "TICCO-SEC-010",
+    "category": "misconfiguration",
+    "owasp": "A05",
+    "severity": "low",
+    "title": "Header Server revela uvicorn/Python — fingerprinting facilitado",
+    "file": "app/main.py",
+    "line": 0,
+    "status": "fixed",
+    "fix_description": "SecurityHeadersMiddleware sobrescreve Server: Ticco em todas as respostas"
+  },
+  {
+    "id": "TICCO-SEC-011",
+    "category": "ticco-specific",
+    "owasp": "A04",
+    "severity": "low",
+    "title": "Receituário em modo mock não tem marca d'água 'RASCUNHO' — pode ser confundido com documento legal",
+    "file": "app/services/pdf_generator.py",
+    "line": 308,
+    "status": "fixed",
+    "fix_description": "Adicionado watermark 'RASCUNHO' diagonal no PDF quando icp_brasil_enabled=False"
+  },
+  {
+    "id": "TICCO-SEC-012",
+    "category": "webhooks",
+    "owasp": "A08",
+    "severity": "medium",
+    "title": "Webhook Stripe retornava 200 mesmo com assinatura inválida — spoofing silencioso",
+    "file": "app/api/webhooks/stripe.py",
+    "line": 247,
+    "status": "fixed",
+    "fix_description": "Agora retorna 400 com HTTPException quando Stripe-Signature ausente ou SignatureVerificationError"
+  }
+]

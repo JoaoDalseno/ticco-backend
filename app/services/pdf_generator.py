@@ -309,6 +309,7 @@ def _html_receituario(
     Este receituário é válido para uma única aplicação na propriedade acima identificada.<br>
     Documento gerado pelo sistema Ticco — useticco.com — {settings.contact_email} — {_data_fmt(date.today())}
   </div>
+  {'<div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-45deg);font-size:72pt;color:rgba(180,0,0,0.08);font-weight:bold;pointer-events:none;white-space:nowrap;z-index:9999">RASCUNHO</div>' if not settings.icp_brasil_enabled else ''}
 </body></html>"""
 
 

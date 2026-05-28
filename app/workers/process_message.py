@@ -21,12 +21,12 @@ import uuid
 from datetime import date
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import AsyncSessionLocal
-from app.models.agronomo import Agronomo, StatusPagamentoEnum
+from app.models.agronomo import Agronomo, PlanoEnum, StatusPagamentoEnum
 from app.models.fazenda import Fazenda
 from app.models.mensagem import Mensagem
 from app.models.talhao import Talhao
@@ -62,6 +62,40 @@ MSG_INATIVO = (
     "Opa! Sua conta ainda não tá ativa. 😕\n"
     f"Fala com a gente pra ativar:\n{settings.contact_email}"
 )
+
+# Cota diária de visitas por plano (A04 — Insecure Design / proteção de custo de IA)
+_COTA_DIARIA: dict[str, int] = {
+    PlanoEnum.free.value: 5,
+    PlanoEnum.basico.value: 30,
+    PlanoEnum.completo.value: 80,
+}
+_COTA_DIARIA_PADRAO = 5  # fallback conservador
+
+MSG_COTA_ATINGIDA = (
+    "Você atingiu o limite diário de visitas do seu plano. 😅\n"
+    "As visitas são reiniciadas à meia-noite. "
+    "Para aumentar seu limite, acesse seu plano em useticco.com."
+)
+
+
+async def _verificar_cota_diaria(agronomo: Agronomo, db: AsyncSession) -> bool:
+    """
+    Retorna True se o agrônomo ainda tem cota disponível hoje.
+    Conta visitas com status != 'erro' criadas hoje (data_visita).
+    """
+    plano_val = agronomo.plano.value if agronomo.plano else PlanoEnum.free.value
+    cota = _COTA_DIARIA.get(plano_val, _COTA_DIARIA_PADRAO)
+
+    hoje = date.today()
+    result = await db.execute(
+        select(func.count(Visita.id)).where(
+            Visita.agronomo_id == agronomo.id,
+            Visita.data_visita == hoje,
+            Visita.status != StatusVisitaEnum.erro,
+        )
+    )
+    visitas_hoje: int = result.scalar_one()
+    return visitas_hoje < cota
 
 
 async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
@@ -113,6 +147,18 @@ async def process_message(mensagem_id: uuid.UUID, db: AsyncSession) -> None:
                 mensagem.processada = True
                 await db.commit()
                 return
+
+        # Cota diária de visitas por plano (proteção de custo de IA — A04)
+        if not await _verificar_cota_diaria(agronomo, db):
+            logger.warning(
+                "[QUOTA] Cota diária atingida agronomo_id=%s plano=%s",
+                agronomo.id,
+                agronomo.status_pagamento,
+            )
+            await whatsapp.send_text(phone, MSG_COTA_ATINGIDA)
+            mensagem.processada = True
+            await db.commit()
+            return
 
         # 4. Se áudio: valida URL, baixa com limite e transcreve
         texto_bruto = mensagem.conteudo_texto or ""
