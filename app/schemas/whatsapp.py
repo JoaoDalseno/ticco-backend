@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ZAPIWebhookPayload(BaseModel):
@@ -26,3 +26,34 @@ class ZAPIWebhookPayload(BaseModel):
     document: dict | None = None   # {"documentUrl": "...", "fileName": "..."}
 
     model_config = {"extra": "allow"}  # aceita campos extras da Z-API
+
+
+# ── Evolution API ─────────────────────────────────────────────────────────────
+
+class EvolutionMessageKey(BaseModel):
+    """Identificador único da mensagem na Evolution API."""
+    model_config = {"extra": "allow", "populate_by_name": True}
+
+    remote_jid: str = Field(alias="remoteJid", default="")
+    from_me: bool = Field(alias="fromMe", default=False)
+    id: str = ""
+
+
+class EvolutionData(BaseModel):
+    """Campo `data` do payload da Evolution API."""
+    model_config = {"extra": "allow"}
+
+    key: EvolutionMessageKey = Field(default_factory=EvolutionMessageKey)
+    message: dict = Field(default_factory=dict)
+    message_type: str = Field(alias="messageType", default="")
+    message_timestamp: int | None = Field(alias="messageTimestamp", default=None)
+    push_name: str = Field(alias="pushName", default="")
+
+
+class EvolutionWebhookPayload(BaseModel):
+    """Payload completo do webhook da Evolution API."""
+    model_config = {"extra": "allow"}
+
+    event: str = ""
+    instance: str = ""
+    data: EvolutionData = Field(default_factory=EvolutionData)
