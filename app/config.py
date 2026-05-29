@@ -33,9 +33,14 @@ class Settings(BaseSettings):
     # OpenAI (Whisper — fallback)
     openai_api_key: str
 
-    # WhatsApp — Z-API
-    zapi_instance_id: str
-    zapi_token: str
+    # ── Evolution API (substitui Z-API) ──────────────────────────────────────
+    evolution_api_url: str = ""       # ex: https://evolution.seudominio.com
+    evolution_api_key: str = ""       # apikey global da instância
+    evolution_instance: str = "ticco" # nome da instância criada na Evolution
+
+    # Z-API — mantido durante período de transição (remover depois)
+    zapi_instance_id: str = ""
+    zapi_token: str = ""
     zapi_base_url: str = "https://api.z-api.io"
     zapi_security_token: str = ""
 
