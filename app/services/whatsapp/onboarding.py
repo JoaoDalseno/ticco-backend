@@ -17,10 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.agronomo import Agronomo, PlanoEnum, StatusPagamentoEnum
 from app.services.notificacao_fundador import NotificacaoFundador
-from app.services.whatsapp import zapi
-from app.services.whatsapp.zapi import ZAPIWhatsAppService
+from app.services.whatsapp import evolution as whatsapp_module
+from app.services.whatsapp.evolution import EvolutionWhatsAppService
 
-_whatsapp_svc = ZAPIWhatsAppService()
+_whatsapp_svc = EvolutionWhatsAppService()
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ async def iniciar(phone: str) -> None:
     """Inicia o onboarding para um número novo."""
     _limpar_expirados()
     _estados[phone] = {"etapa": Etapa.NOME, "dados": {}, "iniciado_em": datetime.now(timezone.utc)}
-    await zapi.send_text(phone, BOAS_VINDAS)
+    await whatsapp_module.send_text(phone, BOAS_VINDAS)
 
 
 async def processar_resposta(phone: str, texto: str | None, db: AsyncSession) -> None:
@@ -137,33 +137,33 @@ async def processar_resposta(phone: str, texto: str | None, db: AsyncSession) ->
 
     # Sem texto (ex: áudio durante onboarding) — orienta a escrever
     if not texto:
-        await zapi.send_text(phone, MSG_PEDE_TEXTO)
+        await whatsapp_module.send_text(phone, MSG_PEDE_TEXTO)
         return
 
     if etapa == Etapa.NOME:
         if len(texto) < 3:
-            await zapi.send_text(phone, "Por favor, informe seu nome completo:")
+            await whatsapp_module.send_text(phone, "Por favor, informe seu nome completo:")
             return
         dados["nome"] = texto
         estado["etapa"] = Etapa.CPF
-        await zapi.send_text(phone, PEDE_CPF)
+        await whatsapp_module.send_text(phone, PEDE_CPF)
 
     elif etapa == Etapa.CPF:
         cpf = _so_digitos(texto)
         if not _cpf_valido(cpf):
-            await zapi.send_text(phone, MSG_CPF_INVALIDO)
+            await whatsapp_module.send_text(phone, MSG_CPF_INVALIDO)
             return
         dados["cpf"] = cpf
         estado["etapa"] = Etapa.CREA
-        await zapi.send_text(phone, PEDE_CREA)
+        await whatsapp_module.send_text(phone, PEDE_CREA)
 
     elif etapa == Etapa.CREA:
         if not _crea_valido(texto):
-            await zapi.send_text(phone, MSG_CREA_INVALIDO)
+            await whatsapp_module.send_text(phone, MSG_CREA_INVALIDO)
             return
         dados["crea"] = texto.strip()
         estado["etapa"] = Etapa.EMAIL
-        await zapi.send_text(phone, PEDE_EMAIL)
+        await whatsapp_module.send_text(phone, PEDE_EMAIL)
 
     elif etapa == Etapa.EMAIL:
         email = None if texto.lower() in {"pular", "nao", "não", "-"} else texto
@@ -189,7 +189,7 @@ async def _criar_agronomo(phone: str, dados: dict, db: AsyncSession) -> None:
         db.add(agronomo)
         await db.commit()
         logger.info("Novo agrônomo criado via onboarding: %s (%s)", agronomo.nome, _mask(phone))
-        await zapi.send_text(phone, _msg_boas_vindas_final(agronomo.nome))
+        await whatsapp_module.send_text(phone, _msg_boas_vindas_final(agronomo.nome))
 
         # Notifica fundador — cidade não é coletada no onboarding; usa fallback
         try:
@@ -205,7 +205,7 @@ async def _criar_agronomo(phone: str, dados: dict, db: AsyncSession) -> None:
     except Exception:
         await db.rollback()
         logger.exception("Erro ao criar agrônomo via onboarding: %s", _mask(phone))
-        await zapi.send_text(
+        await whatsapp_module.send_text(
             phone,
             "Ocorreu um erro ao finalizar seu cadastro. Tente novamente em instantes."
         )

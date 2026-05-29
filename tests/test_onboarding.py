@@ -58,7 +58,7 @@ def test_crea_invalido_muito_curto():
 
 @pytest.mark.asyncio
 async def test_iniciar_envia_boas_vindas_e_seta_estado():
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock) as mock_send:
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock) as mock_send:
         await ob.iniciar(PHONE)
 
     assert ob.em_onboarding(PHONE) is True
@@ -68,7 +68,7 @@ async def test_iniciar_envia_boas_vindas_e_seta_estado():
 
 @pytest.mark.asyncio
 async def test_processar_resposta_sem_sessao_inicia_onboarding(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock) as mock_send:
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock) as mock_send:
         await ob.processar_resposta(PHONE, "qualquer", db_mock)
 
     assert ob.em_onboarding(PHONE) is True
@@ -77,7 +77,7 @@ async def test_processar_resposta_sem_sessao_inicia_onboarding(db_mock):
 
 @pytest.mark.asyncio
 async def test_etapa_nome_avanca_pra_cpf(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock):
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock):
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
 
@@ -87,7 +87,7 @@ async def test_etapa_nome_avanca_pra_cpf(db_mock):
 
 @pytest.mark.asyncio
 async def test_etapa_nome_rejeita_muito_curto(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock):
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock):
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "Jo", db_mock)
 
@@ -96,7 +96,7 @@ async def test_etapa_nome_rejeita_muito_curto(db_mock):
 
 @pytest.mark.asyncio
 async def test_etapa_cpf_avanca_com_cpf_valido(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock):
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock):
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
         await ob.processar_resposta(PHONE, "529.982.247-25", db_mock)
@@ -107,7 +107,7 @@ async def test_etapa_cpf_avanca_com_cpf_valido(db_mock):
 
 @pytest.mark.asyncio
 async def test_etapa_cpf_rejeita_invalido(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock):
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock):
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
         await ob.processar_resposta(PHONE, "11111111111", db_mock)
@@ -117,7 +117,7 @@ async def test_etapa_cpf_rejeita_invalido(db_mock):
 
 @pytest.mark.asyncio
 async def test_etapa_crea_avanca_pra_email(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock):
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock):
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
         await ob.processar_resposta(PHONE, "52998224725", db_mock)
@@ -129,7 +129,7 @@ async def test_etapa_crea_avanca_pra_email(db_mock):
 
 @pytest.mark.asyncio
 async def test_fluxo_completo_cria_agronomo(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock), \
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock), \
          patch("app.services.whatsapp.onboarding._criar_agronomo", new_callable=AsyncMock) as mock_criar:
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
@@ -149,7 +149,7 @@ async def test_fluxo_completo_cria_agronomo(db_mock):
 
 @pytest.mark.asyncio
 async def test_email_pular_grava_none(db_mock):
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock), \
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock), \
          patch("app.services.whatsapp.onboarding._criar_agronomo", new_callable=AsyncMock) as mock_criar:
         await ob.iniciar(PHONE)
         await ob.processar_resposta(PHONE, "João Silva", db_mock)
@@ -163,7 +163,7 @@ async def test_email_pular_grava_none(db_mock):
 @pytest.mark.asyncio
 async def test_audio_em_onboarding_pede_texto(db_mock):
     """Quando usuário em onboarding manda áudio (texto vazio), recebe orientação."""
-    with patch("app.services.whatsapp.onboarding.zapi.send_text", new_callable=AsyncMock) as mock_send:
+    with patch("app.services.whatsapp.onboarding.whatsapp_module.send_text", new_callable=AsyncMock) as mock_send:
         await ob.iniciar(PHONE)
         mock_send.reset_mock()
         await ob.processar_resposta(PHONE, "", db_mock)

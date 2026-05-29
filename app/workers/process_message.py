@@ -39,12 +39,12 @@ from app.services.notificacao_fundador import NotificacaoFundador
 from app.services.pdf_generator import gerar_receituario, gerar_relatorio
 from app.services.storage import StorageService
 from app.services.transcription import MAX_AUDIO_BYTES, TranscriptionService, validar_url_audio
-from app.services.whatsapp.zapi import ZAPIWhatsAppService
+from app.services.whatsapp.evolution import EvolutionWhatsAppService
 from app.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-whatsapp = ZAPIWhatsAppService()
+whatsapp = EvolutionWhatsAppService()
 transcription = TranscriptionService()
 ai_processor = AIProcessor()
 storage = StorageService()
