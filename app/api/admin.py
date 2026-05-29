@@ -9,6 +9,8 @@ import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -324,3 +326,41 @@ async def admin_atualizar_status(
     logger.info("Admin: status do agrônomo %s alterado para %s", agronomo.nome, body.status)
     contexto = await _carregar_contexto_agronomos([agronomo], db)
     return _agronomo_to_schema(agronomo, *contexto[agronomo.id])
+
+
+# ── WhatsApp Status ───────────────────────────────────────────────────────────
+
+@router.get("/whatsapp/status")
+async def whatsapp_status(
+    _: None = Depends(_verificar_admin),
+) -> dict:
+    """
+    Verifica se a instância Evolution API está conectada ao WhatsApp.
+    Estados possíveis: open (conectado), close (desconectado), connecting.
+    """
+    url = (
+        f"{settings.evolution_api_url.rstrip('/')}"
+        f"/instance/connectionState/{settings.evolution_instance}"
+    )
+    headers = {"apikey": settings.evolution_api_key}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(url, headers=headers)
+            r.raise_for_status()
+            data = r.json()
+            state = (data.get("instance") or {}).get("state", "unknown")
+    except httpx.HTTPError as e:
+        logger.error("[ADMIN] Erro ao verificar status WhatsApp: %s", e)
+        return {
+            "instance": settings.evolution_instance,
+            "state": "error",
+            "connected": False,
+            "error": str(e),
+        }
+
+    return {
+        "instance": settings.evolution_instance,
+        "state": state,
+        "connected": state == "open",
+    }
