@@ -1,22 +1,24 @@
 """
-Webhook Z-API — recebe eventos de mensagens do WhatsApp.
+Webhook Evolution API — recebe eventos de mensagens do WhatsApp.
 
 Endpoint: POST /webhooks/whatsapp
 
 Fluxo:
-  1. Valida Security Token (se configurado)
-  2. Filtra apenas ReceivedCallback (mensagens recebidas, não enviadas)
-  3. Salva Mensagem no banco
-  4. Roteamento:
-     a. Número em onboarding → continua onboarding
-     b. Agrônomo cadastrado  → dispara process_message (Fase 4)
-     c. Número desconhecido  → inicia onboarding
+  1. Valida apikey no header
+  2. Filtra apenas events "messages.upsert"
+  3. Ignora mensagens fromMe
+  4. Extrai telefone e tipo de mensagem do payload Evolution API
+  5. Verifica idempotência pelo message_id
+  6. Verifica rate limit por telefone
+  7. Salva Mensagem no banco
+  8. Roteia: onboarding | pipeline IA
 """
+import asyncio
 import hmac
 import logging
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,12 +28,11 @@ from app.core.rate_limiter import check_rate_limit
 from app.database import AsyncSessionLocal
 from app.models.agronomo import Agronomo
 from app.models.mensagem import DirecaoEnum, Mensagem, TipoEnum
-from app.schemas.whatsapp import ZAPIWebhookPayload
+from app.schemas.whatsapp import EvolutionWebhookPayload
 from app.services.whatsapp import onboarding
 from app.workers.process_message import process_message
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/webhooks")
 
 
@@ -40,49 +41,52 @@ def _mask(phone: str) -> str:
     return f"{phone[:3]}****{phone[-4:]}" if len(phone) > 7 else "***"
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+def _validar_apikey(api_key: str | None) -> None:
+    """Rejeita requisições sem apikey válida. compare_digest evita timing attacks."""
+    expected = settings.evolution_api_key
+    if not api_key or not hmac.compare_digest(api_key, expected):
+        logger.warning("[WEBHOOK] Requisição recebida com apikey inválida ou ausente")
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
-def _validar_security_token(client_token: str | None) -> None:
-    """Rejeita requisições sem o token correto (quando configurado).
-    Usa compare_digest para evitar timing attacks.
+
+def _extrair_tipo_e_conteudo(
+    msg: dict, message_type: str
+) -> tuple[TipoEnum, str | None, str | None]:
     """
-    expected = settings.zapi_security_token
-    if expected:
-        if not client_token or not hmac.compare_digest(client_token, expected):
-            raise HTTPException(status_code=401, detail="Security token inválido")
-
-
-def _extrair_tipo_e_conteudo(payload: ZAPIWebhookPayload) -> tuple[TipoEnum, str | None, str | None]:
+    Extrai (tipo, conteudo_texto, midia_url) do dict `message` da Evolution API.
     """
-    Retorna (tipo, conteudo_texto, midia_url) a partir do payload Z-API.
-    """
-    if payload.text:
-        return TipoEnum.texto, payload.text.get("message"), None
+    # Texto simples
+    if "conversation" in msg:
+        return TipoEnum.texto, msg["conversation"], None
 
-    if payload.audio:
-        return TipoEnum.audio, None, payload.audio.get("audioUrl")
+    # Texto longo (extendedTextMessage)
+    if "extendedTextMessage" in msg:
+        return TipoEnum.texto, msg["extendedTextMessage"].get("text"), None
 
-    if payload.image:
-        caption = payload.image.get("caption", "")
-        return TipoEnum.imagem, caption or None, payload.image.get("imageUrl")
+    # Áudio
+    if "audioMessage" in msg:
+        return TipoEnum.audio, None, msg["audioMessage"].get("url")
 
-    if payload.document:
-        return TipoEnum.documento, payload.document.get("fileName"), payload.document.get("documentUrl")
+    # Imagem
+    if "imageMessage" in msg:
+        caption = msg["imageMessage"].get("caption", "")
+        return TipoEnum.imagem, caption or None, msg["imageMessage"].get("url")
+
+    # Documento/PDF
+    if "documentMessage" in msg:
+        filename = msg["documentMessage"].get("fileName")
+        return TipoEnum.documento, filename, msg["documentMessage"].get("url")
 
     return TipoEnum.texto, None, None
 
 
-def _normalizar_phone(phone: str | None) -> str:
-    """Garante formato E.164 (+55...)."""
-    if not phone:
-        return ""
-    phone = phone.strip()
-    if not phone.startswith("+"):
-        phone = f"+{phone}"
-    return phone
+async def _message_ja_processada(db: AsyncSession, message_id: str) -> bool:
+    """Verifica idempotência: retorna True se message_id já foi processado."""
+    result = await db.execute(
+        select(Mensagem.id).where(Mensagem.zapi_message_id == message_id)
+    )
+    return result.scalar_one_or_none() is not None
 
-
-# ── Background task ──────────────────────────────────────────────────────────
 
 async def _processar_em_background(
     phone: str,
@@ -90,9 +94,7 @@ async def _processar_em_background(
     mensagem_id: uuid.UUID,
     agronomo_id: uuid.UUID | None,
 ) -> None:
-    """Roteamento pós-persistência: onboarding ou pipeline de IA.
-    Cria sessão própria para evitar uso de sessão encerrada da request.
-    """
+    """Roteamento pós-persistência: onboarding ou pipeline de IA."""
     async with AsyncSessionLocal() as db:
         try:
             if onboarding.em_onboarding(phone):
@@ -103,56 +105,74 @@ async def _processar_em_background(
                 await onboarding.iniciar(phone)
                 return
 
-            # Agrônomo cadastrado → pipeline IA
             await process_message(mensagem_id, db)
 
         except Exception:
-            logger.exception("Erro no processamento background — phone=%s", _mask(phone))
+            logger.exception(
+                "[WEBHOOK] Erro no processamento background — phone=%s", _mask(phone)
+            )
 
-
-# ── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.post("/whatsapp")
 async def webhook_whatsapp(
     request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    client_token: str | None = Header(default=None, alias="Client-Token"),
 ) -> dict:
-    _validar_security_token(client_token)
+    # 1. Validar apikey
+    api_key = request.headers.get("apikey")
+    _validar_apikey(api_key)
 
     raw = await request.json()
 
+    # 2. Parsear payload
     try:
-        payload = ZAPIWebhookPayload(**raw)
+        payload = EvolutionWebhookPayload(**raw)
     except Exception:
-        logger.warning("Payload Z-API inválido: %s", raw)
+        logger.warning("[WEBHOOK] Payload Evolution API inválido: %s", str(raw)[:200])
         return {"ok": True}
 
-    # Ignora mensagens enviadas pelo próprio bot e callbacks de status
-    if payload.fromMe or payload.type != "ReceivedCallback":
-        return {"ok": True}
+    # 3. Filtrar — só processar mensagens recebidas
+    if payload.event != "messages.upsert":
+        return {"status": "ignored", "event": payload.event}
 
-    phone = _normalizar_phone(payload.phone)
-    if not phone:
-        return {"ok": True}
+    data = payload.data
+    if data.key.from_me:
+        return {"status": "ignored", "reason": "fromMe"}
 
-    # ── Rate limit por telefone ───────────────────────────────────────────────
+    # 4. Extrair telefone — remoteJid: "5516999999999@s.whatsapp.net"
+    remote_jid = data.key.remote_jid
+    phone_digits = remote_jid.split("@")[0]
+    if not phone_digits:
+        return {"ok": True}
+    phone = f"+{phone_digits}"
+
+    message_id = data.key.id
+
+    # 5. Idempotência — não processar mesmo message_id 2x
+    if message_id and await _message_ja_processada(db, message_id):
+        logger.info("[WEBHOOK] message_id=%s já processado — ignorando", message_id)
+        return {"status": "duplicate"}
+
+    # 6. Rate limit por telefone
     allowed, motivo = check_rate_limit(phone)
     if not allowed:
-        # Não responde ao usuário — evita loop de feedback
-        logger.warning("Mensagem bloqueada por rate limit — phone=%s motivo=%s", _mask(phone), motivo)
+        logger.warning(
+            "[WEBHOOK] Rate limit — phone=%s motivo=%s", _mask(phone), motivo
+        )
         return {"status": "rate_limited"}
 
-    tipo, conteudo_texto, midia_url = _extrair_tipo_e_conteudo(payload)
+    tipo, conteudo_texto, midia_url = _extrair_tipo_e_conteudo(
+        data.message, data.message_type
+    )
 
-    # ── Busca agrônomo ────────────────────────────────────────────────────────
+    # 7. Busca agrônomo
     resultado = await db.execute(
         select(Agronomo).where(Agronomo.telefone_wpp == phone)
     )
     agronomo = resultado.scalar_one_or_none()
 
-    # ── Persiste mensagem ─────────────────────────────────────────────────────
+    # 8. Persiste mensagem
     mensagem = Mensagem(
         id=uuid.uuid4(),
         agronomo_id=agronomo.id if agronomo else None,
@@ -161,7 +181,7 @@ async def webhook_whatsapp(
         tipo=tipo,
         conteudo_texto=conteudo_texto,
         midia_url=midia_url,
-        zapi_message_id=payload.messageId,
+        zapi_message_id=message_id,   # reutiliza coluna para Evolution message_id
         raw_payload=raw,
         processada=False,
     )
@@ -170,11 +190,13 @@ async def webhook_whatsapp(
     await db.refresh(mensagem)
 
     logger.info(
-        "Mensagem recebida — phone=%s tipo=%s agronomo=%s",
-        _mask(phone), tipo.value, agronomo.nome if agronomo else "desconhecido",
+        "[WEBHOOK] Mensagem recebida — phone=%s tipo=%s agronomo=%s",
+        _mask(phone),
+        tipo.value,
+        agronomo.nome if agronomo else "desconhecido",
     )
 
-    # ── Processamento assíncrono — nova sessão de DB criada internamente ──────
+    # 9. Processamento assíncrono
     background_tasks.add_task(
         _processar_em_background,
         phone=phone,
