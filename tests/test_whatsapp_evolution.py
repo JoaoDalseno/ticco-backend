@@ -215,11 +215,14 @@ def _evolution_headers(api_key: str = "test-evolution-key") -> dict:
 
 @pytest.mark.asyncio
 async def test_webhook_rejeita_sem_apikey(client):
-    """Requisição sem apikey → 401."""
-    r = await client.post(
-        "/webhooks/whatsapp",
-        json=_evolution_payload(),
-    )
+    """Requisição sem apikey quando EVOLUTION_API_KEY configurada → 401."""
+    with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
+        mock_settings.evolution_api_key = "test-evolution-key"
+
+        r = await client.post(
+            "/webhooks/whatsapp",
+            json=_evolution_payload(),
+        )
     assert r.status_code == 401
 
 
@@ -229,7 +232,6 @@ async def test_webhook_ignora_evento_connection_update(client):
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
         mock_settings.evolution_api_key = "test-evolution-key"
         mock_settings.evolution_instance_key = ""
-        mock_settings.evolution_webhook_ip = ""
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -247,7 +249,6 @@ async def test_webhook_ignora_mensagem_from_me(client):
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
         mock_settings.evolution_api_key = "test-evolution-key"
         mock_settings.evolution_instance_key = ""
-        mock_settings.evolution_webhook_ip = ""
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -270,7 +271,6 @@ async def test_webhook_extrai_telefone_do_remote_jid(client):
     ):
         mock_settings.evolution_api_key = "test-evolution-key"
         mock_settings.evolution_instance_key = ""
-        mock_settings.evolution_webhook_ip = ""
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -292,7 +292,6 @@ async def test_webhook_nao_processa_message_id_duplicado(client):
     ):
         mock_settings.evolution_api_key = "test-evolution-key"
         mock_settings.evolution_instance_key = ""
-        mock_settings.evolution_webhook_ip = ""
 
         r = await client.post(
             "/webhooks/whatsapp",
