@@ -41,13 +41,24 @@ def _mask(phone: str) -> str:
     return f"{phone[:3]}****{phone[-4:]}" if len(phone) > 7 else "***"
 
 
-def _validar_apikey(api_key: str | None) -> None:
+def _validar_acesso(api_key: str | None, client_ip: str) -> None:
     """
-    Rejeita requisições sem apikey válida. compare_digest evita timing attacks.
-    Aceita EVOLUTION_API_KEY (global) ou EVOLUTION_INSTANCE_KEY (por instância).
+    Valida acesso ao webhook em duas etapas:
+      1. Se EVOLUTION_WEBHOOK_IP estiver configurado e o IP bater → aceita direto.
+      2. Caso contrário, verifica apikey (EVOLUTION_API_KEY ou EVOLUTION_INSTANCE_KEY).
+    Usa hmac.compare_digest em todas as comparações para evitar timing attacks.
     """
+    logger.debug("[WEBHOOK] IP de origem: %s", client_ip)
+
+    # 1. Verificação por IP
+    allowed_ip = settings.evolution_webhook_ip
+    if allowed_ip and hmac.compare_digest(client_ip, allowed_ip):
+        logger.debug("[WEBHOOK] Acesso autorizado por IP: %s", client_ip)
+        return
+
+    # 2. Verificação por apikey
     if not api_key:
-        logger.warning("[WEBHOOK] Requisição recebida sem apikey")
+        logger.warning("[WEBHOOK] Sem apikey e IP não autorizado: %s", client_ip)
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     global_key = settings.evolution_api_key
@@ -57,7 +68,7 @@ def _validar_apikey(api_key: str | None) -> None:
     instance_ok = bool(instance_key) and hmac.compare_digest(api_key, instance_key)
 
     if not global_ok and not instance_ok:
-        logger.warning("[WEBHOOK] Requisição recebida com apikey inválida")
+        logger.warning("[WEBHOOK] Apikey inválida — IP: %s", client_ip)
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -131,9 +142,10 @@ async def webhook_whatsapp(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # 1. Validar apikey
+    # 1. Validar acesso (IP ou apikey)
     api_key = request.headers.get("apikey")
-    _validar_apikey(api_key)
+    client_ip = request.client.host if request.client else ""
+    _validar_acesso(api_key, client_ip)
 
     raw = await request.json()
 
