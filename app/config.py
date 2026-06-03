@@ -34,9 +34,10 @@ class Settings(BaseSettings):
     openai_api_key: str
 
     # ── Evolution API (substitui Z-API) ──────────────────────────────────────
-    evolution_api_url: str = ""       # ex: https://evolution.seudominio.com
-    evolution_api_key: str = ""       # apikey global da instância
-    evolution_instance: str = "ticco" # nome da instância criada na Evolution
+    evolution_api_url: str = ""        # ex: https://evolution.seudominio.com
+    evolution_api_key: str = ""        # apikey global da instância
+    evolution_instance: str = "ticco"  # nome da instância criada na Evolution
+    evolution_instance_key: str = ""   # token específico da instância (opcional)
 
     # Z-API — mantido durante período de transição (remover depois)
     zapi_instance_id: str = ""

@@ -42,10 +42,22 @@ def _mask(phone: str) -> str:
 
 
 def _validar_apikey(api_key: str | None) -> None:
-    """Rejeita requisições sem apikey válida. compare_digest evita timing attacks."""
-    expected = settings.evolution_api_key
-    if not api_key or not hmac.compare_digest(api_key, expected):
-        logger.warning("[WEBHOOK] Requisição recebida com apikey inválida ou ausente")
+    """
+    Rejeita requisições sem apikey válida. compare_digest evita timing attacks.
+    Aceita EVOLUTION_API_KEY (global) ou EVOLUTION_INSTANCE_KEY (por instância).
+    """
+    if not api_key:
+        logger.warning("[WEBHOOK] Requisição recebida sem apikey")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    global_key = settings.evolution_api_key
+    instance_key = settings.evolution_instance_key
+
+    global_ok = bool(global_key) and hmac.compare_digest(api_key, global_key)
+    instance_ok = bool(instance_key) and hmac.compare_digest(api_key, instance_key)
+
+    if not global_ok and not instance_ok:
+        logger.warning("[WEBHOOK] Requisição recebida com apikey inválida")
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
