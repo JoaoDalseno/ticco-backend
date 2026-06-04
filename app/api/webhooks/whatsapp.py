@@ -123,6 +123,10 @@ async def webhook_whatsapp(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    # 0. Debug temporário — inspecionar headers da Evolution API
+    logger.debug("[WEBHOOK-DEBUG] Headers recebidos: %s", dict(request.headers))
+    logger.debug("[WEBHOOK-DEBUG] Header 'apikey': %s", request.headers.get("apikey"))
+
     # 1. Validar apikey
     api_key = request.headers.get("apikey")
     _validar_apikey(api_key)
