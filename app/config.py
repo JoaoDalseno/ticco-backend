@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     evolution_api_key: str = ""        # apikey global da instância
     evolution_instance: str = "ticco"  # nome da instância criada na Evolution
     evolution_instance_key: str = ""   # token específico da instância (opcional)
+    evolution_webhook_ip: str = ""     # IP fixo do servidor Evolution (whitelist)
 
     # Z-API — mantido durante período de transição (remover depois)
     zapi_instance_id: str = ""

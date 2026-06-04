@@ -41,15 +41,20 @@ def _mask(phone: str) -> str:
     return f"{phone[:3]}****{phone[-4:]}" if len(phone) > 7 else "***"
 
 
-def _validar_apikey(api_key: str | None) -> None:
+def _validar_origem_ip(client_ip: str | None) -> None:
     """
-    Valida o header 'apikey' enviado pela Evolution API contra
-    settings.evolution_api_key (lida da env var EVOLUTION_API_KEY).
+    Valida o IP de origem da requisição (header 'x-real-ip') contra
+    settings.evolution_webhook_ip (lida da env var EVOLUTION_WEBHOOK_IP).
+    Se a env var estiver vazia, aceita qualquer requisição.
     Usa hmac.compare_digest para evitar timing attacks.
     """
-    expected = settings.evolution_api_key
-    if not api_key or not hmac.compare_digest(api_key, expected):
-        logger.warning("[WEBHOOK] Requisição recebida com apikey inválida ou ausente")
+    expected = settings.evolution_webhook_ip
+    if not expected:
+        return
+    if not client_ip or not hmac.compare_digest(client_ip, expected):
+        logger.warning(
+            "[WEBHOOK] Requisição recebida de IP não autorizado: %s", client_ip
+        )
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -123,13 +128,9 @@ async def webhook_whatsapp(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # 0. Debug temporário — inspecionar headers da Evolution API
-    logger.debug("[WEBHOOK-DEBUG] Headers recebidos: %s", dict(request.headers))
-    logger.debug("[WEBHOOK-DEBUG] Header 'apikey': %s", request.headers.get("apikey"))
-
-    # 1. Validar apikey
-    api_key = request.headers.get("apikey")
-    _validar_apikey(api_key)
+    # 1. Validar IP de origem
+    client_ip = request.headers.get("x-real-ip")
+    _validar_origem_ip(client_ip)
 
     raw = await request.json()
 

@@ -209,15 +209,18 @@ def override_deps():
     app.dependency_overrides.clear()
 
 
-def _evolution_headers(api_key: str = "test-evolution-key") -> dict:
-    return {"apikey": api_key, "Content-Type": "application/json"}
+_ALLOWED_IP = "203.0.113.10"
+
+
+def _evolution_headers(client_ip: str = _ALLOWED_IP) -> dict:
+    return {"x-real-ip": client_ip, "Content-Type": "application/json"}
 
 
 @pytest.mark.asyncio
 async def test_webhook_rejeita_sem_apikey(client):
-    """Requisição sem apikey quando EVOLUTION_API_KEY configurada → 401."""
+    """Requisição sem x-real-ip quando EVOLUTION_WEBHOOK_IP configurado → 401."""
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
-        mock_settings.evolution_api_key = "test-evolution-key"
+        mock_settings.evolution_webhook_ip = _ALLOWED_IP
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -230,8 +233,7 @@ async def test_webhook_rejeita_sem_apikey(client):
 async def test_webhook_ignora_evento_connection_update(client):
     """Evento connection.update não é mensagem — deve retornar ignored."""
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
-        mock_settings.evolution_api_key = "test-evolution-key"
-        mock_settings.evolution_instance_key = ""
+        mock_settings.evolution_webhook_ip = _ALLOWED_IP
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -247,8 +249,7 @@ async def test_webhook_ignora_evento_connection_update(client):
 async def test_webhook_ignora_mensagem_from_me(client):
     """Mensagem enviada pelo próprio bot (fromMe=true) → ignored."""
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
-        mock_settings.evolution_api_key = "test-evolution-key"
-        mock_settings.evolution_instance_key = ""
+        mock_settings.evolution_webhook_ip = _ALLOWED_IP
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -269,8 +270,7 @@ async def test_webhook_extrai_telefone_do_remote_jid(client):
         patch("app.api.webhooks.whatsapp.check_rate_limit", return_value=(True, "")),
         patch("app.api.webhooks.whatsapp.AsyncSessionLocal"),
     ):
-        mock_settings.evolution_api_key = "test-evolution-key"
-        mock_settings.evolution_instance_key = ""
+        mock_settings.evolution_webhook_ip = _ALLOWED_IP
 
         r = await client.post(
             "/webhooks/whatsapp",
@@ -290,8 +290,7 @@ async def test_webhook_nao_processa_message_id_duplicado(client):
         patch("app.api.webhooks.whatsapp._message_ja_processada", return_value=True),
         patch("app.api.webhooks.whatsapp.check_rate_limit", return_value=(True, "")),
     ):
-        mock_settings.evolution_api_key = "test-evolution-key"
-        mock_settings.evolution_instance_key = ""
+        mock_settings.evolution_webhook_ip = _ALLOWED_IP
 
         r = await client.post(
             "/webhooks/whatsapp",
