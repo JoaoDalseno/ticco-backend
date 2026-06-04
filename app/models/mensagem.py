@@ -33,8 +33,8 @@ class Mensagem(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
-    # Número de origem no formato E.164
-    telefone_origem: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    # Número de origem no formato E.164 (50 chars suporta jids longos eventuais)
+    telefone_origem: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     direcao: Mapped[DirecaoEnum] = mapped_column(
         Enum(DirecaoEnum, name="direcao_enum"), nullable=False
     )
@@ -42,10 +42,12 @@ class Mensagem(Base, TimestampMixin):
         Enum(TipoEnum, name="tipo_enum"), nullable=False
     )
     conteudo_texto: Mapped[str | None] = mapped_column(Text, nullable=True)
-    midia_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # URLs assinadas da Evolution API podem ultrapassar 500 chars com tokens
+    midia_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     transcricao: Mapped[str | None] = mapped_column(Text, nullable=True)
     processada: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    zapi_message_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # IDs de mensagem (Z-API / Evolution API) — 200 chars cobre formatos longos
+    zapi_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     # Payload completo do webhook Z-API — para auditoria e debug
     raw_payload: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 

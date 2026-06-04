@@ -108,29 +108,32 @@ async def test_clicksign_rejeita_hmac_adulterado(client):
 
 
 # ============================================================
-# Z-API (WhatsApp) — Security Token (pré-existente, regressão)
+# Evolution API (WhatsApp) — Whitelist por IP (regressão A08)
 # ============================================================
 
 @pytest.mark.asyncio
-async def test_zapi_rejeita_token_ausente(client):
-    """Sem header de autenticação → 401. A08."""
-    r = await client.post(
-        "/webhooks/whatsapp",
-        json={"phone": "+5511999999999", "messageId": "msg-1"},
-    )
+async def test_whatsapp_rejeita_ip_ausente(client):
+    """Sem header x-real-ip quando EVOLUTION_WEBHOOK_IP configurado → 401. A08."""
+    with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
+        mock_settings.evolution_webhook_ip = "203.0.113.10"
+
+        r = await client.post(
+            "/webhooks/whatsapp",
+            json={"phone": "+5511999999999", "messageId": "msg-1"},
+        )
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_zapi_rejeita_token_errado(client):
-    """Token incorreto → 401. A08."""
+async def test_whatsapp_rejeita_ip_errado(client):
+    """IP de origem diferente do esperado → 401. A08."""
     with patch("app.api.webhooks.whatsapp.settings") as mock_settings:
-        mock_settings.zapi_security_token = "token-correto"
+        mock_settings.evolution_webhook_ip = "203.0.113.10"
 
         r = await client.post(
             "/webhooks/whatsapp",
             json={"phone": "+5511999999999"},
-            headers={"X-Security-Token": "token-errado"},
+            headers={"x-real-ip": "198.51.100.5"},
         )
     assert r.status_code == 401
 

@@ -151,6 +151,12 @@ async def webhook_whatsapp(
 
     # 4. Extrair telefone — remoteJid: "5516999999999@s.whatsapp.net"
     remote_jid = data.key.remote_jid
+
+    # Ignora mensagens de grupos (remoteJid termina com @g.us)
+    if remote_jid.endswith("@g.us"):
+        logger.info("[WEBHOOK] Mensagem de grupo ignorada — jid=%s", remote_jid[:20])
+        return {"status": "ignored", "reason": "group_message"}
+
     phone_digits = remote_jid.split("@")[0]
     if not phone_digits:
         return {"ok": True}
