@@ -42,9 +42,12 @@ def _mask(phone: str) -> str:
 
 
 def _validar_apikey(api_key: str | None) -> None:
+    """
+    Valida o header 'apikey' enviado pela Evolution API contra
+    settings.evolution_api_key (lida da env var EVOLUTION_API_KEY).
+    Usa hmac.compare_digest para evitar timing attacks.
+    """
     expected = settings.evolution_api_key
-    if not expected:
-        return
     if not api_key or not hmac.compare_digest(api_key, expected):
         logger.warning("[WEBHOOK] Requisição recebida com apikey inválida ou ausente")
         raise HTTPException(status_code=401, detail="Unauthorized")
