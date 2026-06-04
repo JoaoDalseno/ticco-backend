@@ -47,7 +47,7 @@ async def send_text(phone: str, message: str) -> bool:
         "number": _normalize_phone(phone),
         "text": message,
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
         try:
             r = await client.post(url, json=payload, headers=_headers())
             r.raise_for_status()
@@ -86,7 +86,7 @@ async def send_pdf(
         "fileName": filename,
         "caption": caption,
     }
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
         try:
             r = await client.post(url, json=payload, headers=_headers())
             r.raise_for_status()
@@ -105,7 +105,7 @@ async def send_audio(phone: str, audio_url: str) -> bool:
         "audio": audio_url,
         "encoding": True,
     }
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
         try:
             r = await client.post(url, json=payload, headers=_headers())
             r.raise_for_status()
@@ -126,7 +126,7 @@ async def send_image(phone: str, image_url: str, caption: str = "") -> bool:
         "media": image_url,
         "caption": caption,
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
         try:
             r = await client.post(url, json=payload, headers=_headers())
             r.raise_for_status()
@@ -150,7 +150,7 @@ async def download_media(media_url: str, message_id: str) -> bytes:
         "message": {"key": {"id": message_id}},
         "convertToMp4": False,
     }
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=60.0, verify=False) as client:
         r = await client.post(url, json=payload, headers=_headers())
         r.raise_for_status()
         data = r.json()
